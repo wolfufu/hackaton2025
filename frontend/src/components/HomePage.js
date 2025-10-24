@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 import axios from 'axios';
 import './HomePage.css';
 
@@ -8,31 +9,12 @@ const API_BASE = 'http://localhost:8000/api';
 function HomePage() {
   const [newRoomName, setNewRoomName] = useState('');
   const [inviteLink, setInviteLink] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Создать пользователя при загрузке
-  useEffect(() => {
-    const createTestUser = async () => {
-      try {
-        const response = await axios.post(`${API_BASE}/users`, {
-          email: `user_${Date.now()}@test.com`,
-          name: `User${Date.now().toString().slice(-4)}`
-        });
-        setCurrentUser(response.data);
-      } catch (error) {
-        console.error('Error creating user:', error);
-        // Создаем фиктивного пользователя для тестов
-        setCurrentUser({ id: 1, name: 'Test User', email: 'test@test.com' });
-      }
-    };
-    createTestUser();
-  }, []);
-
-  // Создание комнаты и переход в нее
   const createRoom = async () => {
-    if (!currentUser || !newRoomName.trim()) {
+    if (!newRoomName.trim()) {
       alert('Введите название комнаты');
       return;
     }
@@ -40,52 +22,26 @@ function HomePage() {
     setLoading(true);
     try {
       const response = await axios.post(`${API_BASE}/rooms`, {
-        name: newRoomName,
-        created_by: currentUser.id
+        name: newRoomName
       });
       
-      const roomId = response.data.room_id;
-      setInviteLink(response.data.invite_link);
-      
-      // Переходим в комнату
-      navigate(`/room/${roomId}`, { 
+      navigate(`/room/${response.data.id}`, { 
         state: { 
-          roomId: roomId,
+          roomId: response.data.id,
           inviteLink: response.data.invite_link,
-          roomName: newRoomName,
-          isHost: true,
-          currentUser: currentUser
+          roomName: response.data.name,
+          isHost: true
         }
       });
       
     } catch (error) {
       console.error('Ошибка создания комнаты:', error);
-      
-      // Пробуем тестовый эндпоинт
-      try {
-        const testResponse = await axios.post(`${API_BASE}/rooms/test`, {
-          name: newRoomName
-        });
-        
-        navigate(`/room/${testResponse.data.room_id}`, {
-          state: {
-            roomId: testResponse.data.room_id,
-            inviteLink: testResponse.data.invite_link,
-            roomName: newRoomName,
-            isHost: true,
-            currentUser: currentUser
-          }
-        });
-        
-      } catch (testError) {
-        alert('Ошибка создания комнаты: ' + (testError.response?.data?.detail || testError.message));
-      }
+      alert('Ошибка создания комнаты: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }
   };
 
-  // Вход в существующую комнату
   const joinRoom = async () => {
     if (!inviteLink.trim()) {
       alert('Введите ссылку-приглашение');
@@ -101,8 +57,7 @@ function HomePage() {
           roomId: response.data.room_id,
           inviteLink: inviteLink,
           roomName: response.data.room_name,
-          isHost: false,
-          currentUser: currentUser
+          isHost: false
         }
       });
       
@@ -116,12 +71,18 @@ function HomePage() {
   return (
     <div className="home-page">
       <header className="home-header">
-        <h1>🎥 Video Conference</h1>
+        <div className="header-content">
+          <h1>🎥 Video Conference</h1>
+          <div className="user-menu">
+            <span>Привет, {currentUser.name}!</span>
+            <button onClick={logout} className="logout-btn">Выйти</button>
+          </div>
+        </div>
         <p>Создайте или присоединитесь к видеовстрече</p>
       </header>
 
       <div className="home-content">
-        {/* Создание комнаты */}
+        {/* Остальной код без изменений */}
         <section className="create-section">
           <h2>Создать новую комнату</h2>
           <div className="input-group">
@@ -134,7 +95,7 @@ function HomePage() {
             />
             <button 
               onClick={createRoom} 
-              disabled={!currentUser || loading || !newRoomName.trim()}
+              disabled={loading || !newRoomName.trim()}
               className="create-btn"
             >
               {loading ? 'Создание...' : 'Создать комнату'}
@@ -146,7 +107,6 @@ function HomePage() {
           <span>или</span>
         </div>
 
-        {/* Вход в комнату */}
         <section className="join-section">
           <h2>Присоединиться к комнате</h2>
           <div className="input-group">
@@ -166,13 +126,6 @@ function HomePage() {
             </button>
           </div>
         </section>
-
-        {/* Информация о пользователе */}
-        {currentUser && (
-          <div className="user-info">
-            <p>Вы вошли как: <strong>{currentUser.name}</strong></p>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1,12 +1,14 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from websocket import manager
 from database import SessionLocal, engine, get_db
 from models import Base, Room, User
 import schemas
+import auth
 import secrets
 import string
+from datetime import timedelta
 
 from database import Base, engine
 
@@ -23,6 +25,92 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Регистрация пользователя
+@app.post("/api/auth/register", response_model=schemas.Token)
+def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Регистрация нового пользователя"""
+    # Проверяем, нет ли пользователя с таким email
+    db_user = db.query(User).filter(User.email == user_data.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Создаем пользователя
+    db_user = User(email=user_data.email, name=user_data.name)
+    db_user.set_password(user_data.password)
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    # Создаем токен
+    access_token = auth.create_access_token(
+        data={"sub": str(db_user.id)}
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": db_user
+    }
+
+# Авторизация пользователя
+@app.post("/api/auth/login", response_model=schemas.Token)
+def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
+    """Авторизация пользователя"""
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user or not user.check_password(user_data.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Создаем токен
+    access_token = auth.create_access_token(
+        data={"sub": str(user.id)}
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }
+
+# Получение текущего пользователя
+@app.get("/api/auth/me", response_model=schemas.UserResponse)
+def get_current_user(current_user: User = Depends(auth.get_current_user)):
+    """Получение информации о текущем пользователе"""
+    return current_user
+
+# Обновляем создание комнаты с авторизацией
+@app.post("/api/rooms", response_model=schemas.RoomResponse)
+def create_room(
+    room_data: schemas.RoomCreate,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Создание комнаты с уникальной ссылкой"""
+    # Генерируем уникальную ссылку
+    invite_link = generate_invite_link()
+    
+    # Проверяем, что ссылка уникальна
+    while db.query(Room).filter(Room.invite_link == invite_link).first():
+        invite_link = generate_invite_link()
+    
+    # Создаем комнату
+    db_room = Room(
+        name=room_data.name,
+        invite_link=invite_link,
+        created_by=current_user.id
+    )
+    
+    db.add(db_room)
+    db.commit()
+    db.refresh(db_room)
+    
+    return db_room
+
 
 @app.get("/")
 def read_root():
