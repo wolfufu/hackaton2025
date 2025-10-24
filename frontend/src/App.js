@@ -1,32 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './components/AuthContext';
+import Login from './components/Login';
+import Register from './components/Register';
+import HomePage from './components/HomePage';
+import RoomPage from './components/RoomPage';
 import './App.css';
 
-const API_BASE = 'http://localhost:8000';
+function AuthWrapper() {
+  const [isLogin, setIsLogin] = useState(true);
+  const { currentUser } = useAuth();
+
+  if (currentUser) {
+    return <Navigate to="/" replace />;
+  }
+
+  return isLogin ? (
+    <Login onSwitchToRegister={() => setIsLogin(false)} />
+  ) : (
+    <Register onSwitchToLogin={() => setIsLogin(true)} />
+  );
+}
+
+function ProtectedRoute({ children }) {
+  const { currentUser } = useAuth();
+  return currentUser ? children : <Navigate to="/auth" replace />;
+}
 
 function App() {
-  const [data, setData] = useState({});
-  const [items, setItems] = useState([]);
-
-  useEffect(() => {
-    // Получение данных с бэкенда
-    axios.get(`${API_BASE}/`)
-      .then(response => setData(response.data));
-
-    axios.get(`${API_BASE}/api/items`)
-      .then(response => setItems(response.data.items));
-  }, []);
-
   return (
-    <div className="App">
-      <h1>React + FastAPI</h1>
-      <p>Сообщение: {data.message}</p>
-      <ul>
-        {items.map((item, index) => (
-          <li key={index}>{item}</li>
-        ))}
-      </ul>
-    </div>
+    <AuthProvider>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route path="/auth" element={<AuthWrapper />} />
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <HomePage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/room/:roomId" 
+              element={
+                <ProtectedRoute>
+                  <RoomPage />
+                </ProtectedRoute>
+              } 
+            />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 
