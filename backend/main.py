@@ -9,6 +9,7 @@ import auth
 import secrets
 import string
 from datetime import timedelta
+from webrtc import router as webrtc_router
 
 from database import Base, engine
 
@@ -16,6 +17,8 @@ from database import Base, engine
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+app.include_router(webrtc_router, prefix="/api")
 
 # Настройка CORS для React
 app.add_middleware(
