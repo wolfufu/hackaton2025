@@ -17,7 +17,7 @@ class Room(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     invite_link = Column(String, unique=True, index=True)
-    created_by = Column(Integer, ForeignKey("users.id"))
+    created_by = Column(Integer) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
 

@@ -8,6 +8,11 @@ import schemas
 import secrets
 import string
 
+from database import Base, engine
+
+# Создаем таблицы в БД
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI()
 
 # Настройка CORS для React
@@ -85,3 +90,75 @@ def join_room(invite_link: str, db: Session = Depends(get_db)):
         "room_name": room.name,
         "status": "success"
     }
+
+@app.post("/api/users", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Создание пользователя"""
+    # Проверяем, нет ли пользователя с таким email
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    db_user = User(email=user.email, name=user.name)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.get("/api/users/{user_id}", response_model=schemas.User)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    """Получение пользователя по ID"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+# Создаем тестового пользователя при старте
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    try:
+        # Проверяем, есть ли тестовый пользователь
+        test_user = db.query(User).filter(User.email == "test@example.com").first()
+        if not test_user:
+            test_user = User(email="test@example.com", name="Test User")
+            db.add(test_user)
+            db.commit()
+            print("Создан тестовый пользователь с ID:", test_user.id)
+    finally:
+        db.close()
+
+# Тестовый эндпоинт для создания комнаты
+@app.post("/api/rooms/test")
+def create_room_test(room_data: dict, db: Session = Depends(get_db)):
+    """Создание комнаты для тестирования"""
+    try:
+        # Сначала создаем тестового пользователя если нет
+        test_user = db.query(User).first()
+        if not test_user:
+            test_user = User(email="test@example.com", name="Test User")
+            db.add(test_user)
+            db.commit()
+            db.refresh(test_user)
+        
+        # Генерируем уникальную ссылку
+        invite_link = generate_invite_link()
+        while db.query(Room).filter(Room.invite_link == invite_link).first():
+            invite_link = generate_invite_link()
+        
+        # Создаем комнату
+        db_room = Room(
+            name=room_data.get('name', 'Test Room'),
+            invite_link=invite_link,
+            created_by=test_user.id
+        )
+        
+        db.add(db_room)
+        db.commit()
+        db.refresh(db_room)
+        
+        return {"room_id": db_room.id, "invite_link": invite_link}
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
