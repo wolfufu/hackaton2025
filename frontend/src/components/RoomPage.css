@@ -1,0 +1,183 @@
+.room-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  color: white;
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #404040;
+}
+
+.room-info h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.room-info p {
+  margin: 5px 0 0 0;
+  color: #ccc;
+  font-size: 0.9rem;
+}
+
+.room-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.invite-btn, .leave-btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.invite-btn {
+  background: #4CAF50;
+  color: white;
+}
+
+.leave-btn {
+  background: #f44336;
+  color: white;
+}
+
+.room-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.video-section {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: #000;
+}
+
+.video-container {
+  flex: 1;
+  position: relative;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.local-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 0.8rem;
+}
+
+.media-controls {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+.control-btn {
+  width: 60px;
+  height: 60px;
+  border: none;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  cursor: pointer;
+  background: #333;
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.control-btn.muted {
+  background: #f44336;
+}
+
+.control-btn.off {
+  background: #666;
+}
+
+.chat-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #2d2d2d;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+.chat-header {
+  padding: 15px 20px;
+  background: #404040;
+  border-bottom: 1px solid #555;
+}
+
+.messages-container {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.message {
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #404040;
+  border-radius: 8px;
+}
+
+.message .timestamp {
+  display: block;
+  font-size: 0.7rem;
+  color: #999;
+  margin-top: 5px;
+}
+
+.message-input {
+  display: flex;
+  padding: 15px;
+  gap: 10px;
+  background: #404040;
+}
+
+.message-input input {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  background: #555;
+  color: white;
+}
+
+.message-input button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  background: #4CAF50;
+  color: white;
+  cursor: pointer;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.2rem;
+}
