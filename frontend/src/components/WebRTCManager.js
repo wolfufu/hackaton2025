@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-
+import { WS_BASE } from '../config';
 class WebRTCManager {
   constructor(roomId, userId, onRemoteStream, onUserLeft) {
     this.roomId = roomId;
@@ -19,7 +19,7 @@ class WebRTCManager {
   }
 
   // Инициализация WebRTC
-  async initialize() {
+async initialize() {
     try {
       // Получаем доступ к медиаустройствам
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -28,7 +28,7 @@ class WebRTCManager {
       });
       
       // Подключаемся к WebSocket для сигналинга
-      this.connectWebSocket();
+      await this.connectWebSocket();
       
       return this.localStream;
     } catch (error) {
@@ -40,57 +40,59 @@ class WebRTCManager {
   // WebRTCManager.js - обнови connectWebSocket
 connectWebSocket() {
     return new Promise((resolve, reject) => {
-        this.websocket = new WebSocket(`ws://83.234.174.96:8000/api/ws/webrtc/${this.roomId}/${this.userId}`);
-        
-        this.websocket.onopen = () => {
-            console.log('WebRTC WebSocket connected');
-            resolve();
-        };
+      const wsUrl = `${WS_BASE}/ws/webrtc/${this.roomId}/${this.userId}`;
+      console.log('Connecting to WebSocket:', wsUrl); // Отладка
+      
+      this.websocket = new WebSocket(wsUrl);
+      
+      this.websocket.onopen = () => {
+        console.log('WebRTC WebSocket connected');
+        resolve();
+      };
 
-        this.websocket.onerror = (error) => {
-            console.error('WebRTC WebSocket error:', error);
-            reject(error);
-        };
+      this.websocket.onerror = (error) => {
+        console.error('WebRTC WebSocket error:', error);
+        reject(error);
+      };
 
-        this.websocket.onclose = (event) => {
-            console.log('WebRTC WebSocket disconnected:', event.code, event.reason);
-        };
+      this.websocket.onclose = (event) => {
+        console.log('WebRTC WebSocket disconnected:', event.code, event.reason);
+      };
 
-        this.websocket.onmessage = async (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                
-                // Игнорируем сообщения от самого себя
-                if (data.from_user_id === this.userId) return;
-                
-                switch (data.type) {
-                    case 'offer':
-                        await this.handleOffer(data.offer, data.from_user_id);
-                        break;
-                    case 'answer':
-                        await this.handleAnswer(data.answer, data.from_user_id);
-                        break;
-                    case 'ice-candidate':
-                        await this.handleIceCandidate(data.candidate, data.from_user_id);
-                        break;
-                    case 'user_joined':
-                        if (data.user_id !== this.userId) {
-                            await this.createOffer(data.user_id);
-                        }
-                        break;
-                    case 'user_left':
-                        if (data.user_id !== this.userId) {
-                            this.handleUserLeft(data.user_id);
-                        }
-                        break;
-                }
-            } catch (error) {
-                console.error('Error processing WebSocket message:', error);
-            }
-        };
+      this.websocket.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Игнорируем сообщения от самого себя
+          if (data.from_user_id === this.userId) return;
+          
+          switch (data.type) {
+            case 'offer':
+              await this.handleOffer(data.offer, data.from_user_id);
+              break;
+            case 'answer':
+              await this.handleAnswer(data.answer, data.from_user_id);
+              break;
+            case 'ice-candidate':
+              await this.handleIceCandidate(data.candidate, data.from_user_id);
+              break;
+            case 'user_joined':
+              if (data.user_id !== this.userId) {
+                await this.createOffer(data.user_id);
+              }
+              break;
+            case 'user_left':
+              if (data.user_id !== this.userId) {
+                this.handleUserLeft(data.user_id);
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
+        }
+      };
     });
-}
-
+  }
   // Создание PeerConnection
   createPeerConnection(userId) {
     const peerConnection = new RTCPeerConnection(this.configuration);

@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import axios from 'axios';
 import './HomePage.css';
-
-const API_BASE = 'http://localhost:8000/api';
+import { API_BASE } from '../config';  // Импортируем из config
 
 function HomePage() {
   const [newRoomName, setNewRoomName] = useState('');
@@ -21,6 +20,7 @@ function HomePage() {
 
     setLoading(true);
     try {
+      console.log('Creating room at:', `${API_BASE}/rooms`); // Отладка
       const response = await axios.post(`${API_BASE}/rooms`, {
         name: newRoomName
       });
@@ -50,6 +50,7 @@ function HomePage() {
 
     setLoading(true);
     try {
+      console.log('Joining room at:', `${API_BASE}/rooms/${inviteLink}`); // Отладка
       const response = await axios.get(`${API_BASE}/rooms/${inviteLink}`);
       
       navigate(`/room/${response.data.room_id}`, {
@@ -82,7 +83,6 @@ function HomePage() {
       </header>
 
       <div className="home-content">
-        {/* Остальной код без изменений */}
         <section className="create-section">
           <h2>Создать новую комнату</h2>
           <div className="input-group">

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE } from '../config';  // Импортируем из config
 
 const AuthContext = createContext();
 
@@ -10,7 +11,6 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const API_BASE = 'http://localhost:8000/api';
 
   // Проверяем токен при загрузке
   useEffect(() => {
@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchCurrentUser = async () => {
     try {
+      console.log('Fetching user from:', `${API_BASE}/auth/me`); // Отладка
       const response = await axios.get(`${API_BASE}/auth/me`);
       setCurrentUser(response.data);
     } catch (error) {
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
+      console.log('Registering at:', `${API_BASE}/auth/register`); // Отладка
       const response = await axios.post(`${API_BASE}/auth/register`, userData);
       const { access_token, user } = response.data;
       
@@ -56,6 +58,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (userData) => {
     try {
+      console.log('Logging in at:', `${API_BASE}/auth/login`); // Отладка
       const response = await axios.post(`${API_BASE}/auth/login`, userData);
       const { access_token, user } = response.data;
       
