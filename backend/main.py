@@ -16,38 +16,35 @@ from webrtc import router as webrtc_router
 from database import Base, engine
 
 
+import logging  
+
+
+logger = logging.getLogger(__name__)
+
 # Создаем таблицы в БД
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+
 # CORS настройки для продакшена
-origins = [
-    "http://localhost:3000",
-    "http://localhost:3001", 
-    "http://localhost:3002",
-    "http://localhost:3003",
-    "http://10.241.117.59:3000",
-    "http://10.241.117.59:3001",
-    "http://10.241.117.59:3002",
-    "http://10.241.117.59:3003",
-    "http://10.241.117.189:3000",  # второй ноутбук
-    "http://10.241.117.189:3001",
-    "http://10.241.117.189:3002", 
-    "http://10.241.117.189:3003",
-]
 
-app.include_router(webrtc_router, prefix="/api")
 
-# Настройка CORS для React
+# ИЛИ просто разрешить все (для разработки)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешить ВСЕ источники
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      "http://10.241.117.59:3000",
+        "http://10.165.7.206:3000",  # Ваш локальный IP
+        "http://26.87.80.42:3000",   # Другой ваш IP
+        "http://192.168.56.1:3000"   # Еще один IP
+    ,"*"],  # Разрешаем все origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Разрешаем все методы
+    allow_headers=["*"],  # Разрешаем все заголовки
 )
-
 # Регистрация пользователя
 @app.post("/api/auth/register", response_model=schemas.Token)
 def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -119,17 +116,73 @@ def get_items():
 @app.post("/api/items")
 def create_item(item: dict):
     return {"status": "created", "item": item}
+@app.websocket("/ws/webrtc/{room_id}/{user_id}")
+async def webrtc_websocket(websocket: WebSocket, room_id: str, user_id: str):
+    room_key = f"webrtc_{room_id}"
+    
+    try:
+        # Подключаемся через manager (он сам вызовет websocket.accept())
+        await manager.connect(websocket, room_key)
+        logger.info(f"User {user_id} connected to room {room_id}")
+        
+        # Уведомляем других участников о новом пользователе
+        await manager.broadcast({
+            "type": "user_joined",
+            "user_id": user_id
+        }, room_key)
+        
+        # Основной цикл обработки сообщений
+        while True:
+            try:
+                data = await websocket.receive_json()
+                logger.debug(f"Received WebRTC message from {user_id}: {data.get('type')}")
+                
+                # Пересылаем сообщение всем участникам комнаты
+                await manager.broadcast({
+                    **data,
+                    "from_user_id": user_id
+                }, room_key)
+                
+            except WebSocketDisconnect:
+                logger.info(f"User {user_id} disconnected normally")
+                break
+            except Exception as e:
+                logger.error(f"Error processing message from {user_id}: {e}")
+                continue
+                
+    except WebSocketDisconnect:
+        logger.info(f"User {user_id} disconnected during connection")
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+    finally:
+        # Всегда уведомляем о выходе пользователя
+        try:
+            await manager.broadcast({
+                "type": "user_left", 
+                "user_id": user_id
+            }, room_key)
+        except Exception as e:
+            logger.error(f"Error broadcasting user_left: {e}")
+        
+        # Отключаем WebSocket
+        try:
+            await manager.disconnect(websocket, room_key)
+        except Exception as e:
+            logger.error(f"Error during disconnect: {e}")
+        
+        logger.info(f"User {user_id} fully disconnected from room {room_id}")
 
 @app.websocket("/ws/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str):
+async def room_sync_websocket(websocket: WebSocket, room_id: str):
     await manager.connect(websocket, room_id)
     try:
         while True:
             data = await websocket.receive_json()
+            # Пересылаем сообщение всем в комнате
             await manager.broadcast(data, room_id)
     except WebSocketDisconnect:
-        manager.active_connections[room_id].remove(websocket)
-
+        
+        await manager.disconnect(websocket, room_id)
 def generate_invite_link(length=10):
     """Генерация уникальной ссылки для комнаты"""
     alphabet = string.ascii_letters + string.digits

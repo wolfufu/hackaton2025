@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
 import { WS_BASE } from '../config';
+
 class WebRTCManager {
   constructor(roomId, userId, onRemoteStream, onUserLeft) {
     this.roomId = roomId;
@@ -10,99 +10,153 @@ class WebRTCManager {
     this.localStream = null;
     this.peerConnections = {};
     this.websocket = null;
+    this.connectedUsers = new Set();
+    
     this.configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10
     };
   }
 
-  // Инициализация WebRTC
-async initialize() {
+  async initialize() {
     try {
-      // Получаем доступ к медиаустройствам
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
+      console.log('🎥 Initializing WebRTC for user:', this.userId);
       
-      // Подключаемся к WebSocket для сигналинга
+      await this.initializeMediaDevices();
       await this.connectWebSocket();
       
+      console.log('✅ WebRTC initialized successfully');
       return this.localStream;
+      
     } catch (error) {
-      console.error('Error accessing media devices:', error);
+      console.error('❌ WebRTC initialization failed:', error);
       throw error;
     }
   }
 
-  // WebRTCManager.js - обнови connectWebSocket
-connectWebSocket() {
+  async initializeMediaDevices() {
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      console.log('✅ Media devices accessed:', {
+        video: this.localStream.getVideoTracks().length > 0,
+        audio: this.localStream.getAudioTracks().length > 0
+      });
+
+    } catch (error) {
+      console.warn('⚠️ Cannot access camera/microphone:', error);
+      this.localStream = new MediaStream();
+      console.log('📱 Created empty stream for connection testing');
+    }
+  }
+
+  connectWebSocket() {
     return new Promise((resolve, reject) => {
       const wsUrl = `${WS_BASE}/ws/webrtc/${this.roomId}/${this.userId}`;
-      console.log('Connecting to WebSocket:', wsUrl); // Отладка
+      console.log('🔌 Connecting to WebSocket:', wsUrl);
       
       this.websocket = new WebSocket(wsUrl);
       
       this.websocket.onopen = () => {
-        console.log('WebRTC WebSocket connected');
+        console.log('✅ WebSocket connected');
+        
+        setTimeout(() => {
+          this.sendWebSocketMessage({
+            type: 'user_joined',
+            user_id: this.userId
+          });
+        }, 1000);
+        
         resolve();
       };
 
       this.websocket.onerror = (error) => {
-        console.error('WebRTC WebSocket error:', error);
+        console.error('❌ WebSocket error:', error);
         reject(error);
       };
 
       this.websocket.onclose = (event) => {
-        console.log('WebRTC WebSocket disconnected:', event.code, event.reason);
+        console.log('🔌 WebSocket disconnected:', event.code, event.reason);
       };
 
       this.websocket.onmessage = async (event) => {
         try {
           const data = JSON.parse(event.data);
-          
-          // Игнорируем сообщения от самого себя
-          if (data.from_user_id === this.userId) return;
-          
-          switch (data.type) {
-            case 'offer':
-              await this.handleOffer(data.offer, data.from_user_id);
-              break;
-            case 'answer':
-              await this.handleAnswer(data.answer, data.from_user_id);
-              break;
-            case 'ice-candidate':
-              await this.handleIceCandidate(data.candidate, data.from_user_id);
-              break;
-            case 'user_joined':
-              if (data.user_id !== this.userId) {
-                await this.createOffer(data.user_id);
-              }
-              break;
-            case 'user_left':
-              if (data.user_id !== this.userId) {
-                this.handleUserLeft(data.user_id);
-              }
-              break;
-          }
+          await this.handleSignalingMessage(data);
         } catch (error) {
-          console.error('Error processing WebSocket message:', error);
+          console.error('❌ Error processing message:', error);
         }
       };
     });
   }
-  // Создание PeerConnection
+
+  async handleSignalingMessage(data) {
+    if (data.from_user_id === this.userId) return;
+
+    console.log(`📨 ${data.type} from ${data.from_user_id}`);
+
+    switch (data.type) {
+      case 'user_joined':
+        await this.handleUserJoined(data.user_id);
+        break;
+      case 'user_left':
+        this.handleUserLeft(data.user_id);
+        break;
+      case 'offer':
+        await this.handleOffer(data.offer, data.from_user_id);
+        break;
+      case 'answer':
+        await this.handleAnswer(data.answer, data.from_user_id);
+        break;
+      case 'ice-candidate':
+        await this.handleIceCandidate(data.candidate, data.from_user_id);
+        break;
+    }
+  }
+
+  async handleUserJoined(userId) {
+    if (userId === this.userId) return;
+    
+    console.log(`👤 New user joined: ${userId}`);
+    this.connectedUsers.add(userId);
+    
+    setTimeout(async () => {
+      await this.createOffer(userId);
+    }, 2000);
+  }
+
   createPeerConnection(userId) {
+    console.log(`🔗 Creating peer connection for ${userId}`);
+    
     const peerConnection = new RTCPeerConnection(this.configuration);
     
-    // Добавляем локальный поток
-    this.localStream.getTracks().forEach(track => {
-      peerConnection.addTrack(track, this.localStream);
-    });
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => {
+        console.log(`➕ Adding ${track.kind} track to ${userId}`);
+        try {
+          peerConnection.addTrack(track, this.localStream);
+        } catch (error) {
+          console.error(`❌ Error adding ${track.kind} track:`, error);
+        }
+      });
+    }
 
-    // Обработка ICE кандидатов
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         this.sendWebSocketMessage({
@@ -113,142 +167,197 @@ connectWebSocket() {
       }
     };
 
-    // Получение удаленного потока
     peerConnection.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      this.onRemoteStream(userId, remoteStream);
+      console.log(`🎬 Received remote ${event.track.kind} track from ${userId}`);
+      
+      if (event.streams && event.streams[0]) {
+        console.log(`📹 Stream received from ${userId} with ${event.streams[0].getTracks().length} tracks`);
+        this.onRemoteStream(userId, event.streams[0]);
+      }
     };
 
     peerConnection.onconnectionstatechange = () => {
-      console.log(`Connection state with ${userId}:`, peerConnection.connectionState);
+      const state = peerConnection.connectionState;
+      console.log(`🔗 ${userId} connection state:`, state);
     };
 
     this.peerConnections[userId] = peerConnection;
     return peerConnection;
   }
 
-  // Создание оффера для нового пользователя
-    async createOffer(userId) {
-        // Не создаем оффер для самого себя
-        if (userId === this.userId) return;
-
-        const peerConnection = this.createPeerConnection(userId);
-        
-        try {
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            
-            this.sendWebSocketMessage({
-                type: 'offer',
-                offer: offer,
-                to_user_id: userId
-            });
-        } catch (error) {
-            console.error('Error creating offer:', error);
-        }
+  async createOffer(userId) {
+    if (userId === this.userId) return;
+    
+    console.log(`📝 Creating offer for ${userId}`);
+    
+    let peerConnection = this.peerConnections[userId];
+    if (!peerConnection) {
+      peerConnection = this.createPeerConnection(userId);
     }
+    
+    try {
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+      
+      await peerConnection.setLocalDescription(offer);
+      
+      this.sendWebSocketMessage({
+        type: 'offer',
+        offer: offer,
+        to_user_id: userId
+      });
+      
+      console.log(`✅ Offer sent to ${userId}`);
+    } catch (error) {
+      console.error(`❌ Error creating offer for ${userId}:`, error);
+    }
+  }
 
-  // Обработка входящего оффера
   async handleOffer(offer, fromUserId) {
-    // Игнорируем офферы от самого себя
     if (fromUserId === this.userId) return;
-
+    
+    console.log(`📝 Handling offer from ${fromUserId}`);
+    
     let peerConnection = this.peerConnections[fromUserId];
     if (!peerConnection) {
-        peerConnection = this.createPeerConnection(fromUserId);
+      peerConnection = this.createPeerConnection(fromUserId);
     }
-
+    
     try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        this.sendWebSocketMessage({
-            type: 'answer',
-            answer: answer,
-            to_user_id: fromUserId
-        });
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      
+      this.sendWebSocketMessage({
+        type: 'answer',
+        answer: answer,
+        to_user_id: fromUserId
+      });
+      
+      console.log(`✅ Answer sent to ${fromUserId}`);
     } catch (error) {
-        console.error('Error handling offer:', error);
+      console.error(`❌ Error handling offer from ${fromUserId}:`, error);
     }
-}
+  }
 
-  // Обработка ответа
   async handleAnswer(answer, fromUserId) {
     const peerConnection = this.peerConnections[fromUserId];
     if (peerConnection) {
       try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log(`✅ Answer processed from ${fromUserId}`);
       } catch (error) {
-        console.error('Error handling answer:', error);
+        console.error(`❌ Error handling answer from ${fromUserId}:`, error);
       }
     }
   }
 
-  // Обработка ICE кандидатов
   async handleIceCandidate(candidate, fromUserId) {
     const peerConnection = this.peerConnections[fromUserId];
-    if (peerConnection) {
+    if (peerConnection && peerConnection.remoteDescription) {
       try {
         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (error) {
-        console.error('Error adding ICE candidate:', error);
+        console.error(`❌ Error adding ICE candidate from ${fromUserId}:`, error);
       }
     }
   }
 
-  // Обработка выхода пользователя
   handleUserLeft(userId) {
+    console.log(`👤 User left: ${userId}`);
     if (this.peerConnections[userId]) {
       this.peerConnections[userId].close();
       delete this.peerConnections[userId];
     }
+    this.connectedUsers.delete(userId);
     this.onUserLeft(userId);
   }
 
-  // Отправка сообщения через WebSocket
   sendWebSocketMessage(message) {
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-      this.websocket.send(JSON.stringify(message));
+      const messageWithSender = {
+        ...message,
+        from_user_id: this.userId
+      };
+      this.websocket.send(JSON.stringify(messageWithSender));
     }
   }
 
-  // Переключение аудио
   toggleAudio() {
     if (this.localStream) {
-      const audioTrack = this.localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        return audioTrack.enabled;
+      const audioTracks = this.localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const enabled = !audioTracks[0].enabled;
+        audioTracks[0].enabled = enabled;
+        console.log(`🎤 Audio ${enabled ? 'enabled' : 'disabled'}`);
+        return enabled;
       }
     }
     return false;
   }
 
-  // Переключение видео
   toggleVideo() {
     if (this.localStream) {
-      const videoTrack = this.localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        return videoTrack.enabled;
+      const videoTracks = this.localStream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const enabled = !videoTracks[0].enabled;
+        videoTracks[0].enabled = enabled;
+        console.log(`📹 Video ${enabled ? 'enabled' : 'disabled'}`);
+        return enabled;
       }
     }
     return false;
   }
 
-  // Остановка всех соединений
+  async restartMedia() {
+    try {
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(track => track.stop());
+      }
+      
+      await this.initializeMediaDevices();
+      
+      Object.keys(this.peerConnections).forEach(userId => {
+        const pc = this.peerConnections[userId];
+        
+        const senders = pc.getSenders();
+        senders.forEach(s => {
+          if (s.track) {
+            pc.removeTrack(s);
+          }
+        });
+        
+        if (this.localStream) {
+          this.localStream.getTracks().forEach(track => {
+            pc.addTrack(track, this.localStream);
+          });
+        }
+      });
+      
+      return this.localStream;
+    } catch (error) {
+      console.error('❌ Error restarting media:', error);
+      throw error;
+    }
+  }
+
   destroy() {
-    // Закрываем все PeerConnection
+    console.log('🧹 Cleaning up WebRTC...');
+    
+    this.sendWebSocketMessage({
+      type: 'user_left',
+      user_id: this.userId
+    });
+
     Object.values(this.peerConnections).forEach(pc => pc.close());
     this.peerConnections = {};
 
-    // Останавливаем локальный поток
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
     }
 
-    // Закрываем WebSocket
     if (this.websocket) {
       this.websocket.close();
     }

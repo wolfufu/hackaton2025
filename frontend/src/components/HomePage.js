@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import axios from 'axios';
 import './HomePage.css';
-import { API_BASE } from '../config';  // Импортируем из config
+import { API_BASE } from '../config';
 
 function HomePage() {
   const [newRoomName, setNewRoomName] = useState('');
@@ -11,6 +11,50 @@ function HomePage() {
   const [loading, setLoading] = useState(false);
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Автоматическое присоединение по ссылке
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinCode = urlParams.get('join');
+    
+    if (joinCode) {
+      setInviteLink(joinCode);
+      setTimeout(() => {
+        joinRoomAuto(joinCode);
+      }, 500);
+    }
+  }, []);
+
+  const joinRoomAuto = async (code) => {
+    setLoading(true);
+    try {
+      let cleanCode = code;
+      if (code.includes('join=')) {
+        cleanCode = code.split('join=')[1];
+      }
+      cleanCode = cleanCode.split('&')[0];
+      cleanCode = cleanCode.trim();
+      
+      console.log('Auto-joining room with code:', cleanCode);
+      const response = await axios.get(`${API_BASE}/rooms/${cleanCode}`);
+      
+      navigate(`/room/${response.data.room_id}`, {
+        state: {
+          roomId: response.data.room_id,
+          inviteLink: cleanCode,
+          roomName: response.data.room_name,
+          isHost: false
+        }
+      });
+      
+    } catch (error) {
+      console.error('Auto-join room error:', error);
+      alert('Комната не найдена или неактивна');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const createRoom = async () => {
     if (!newRoomName.trim()) {
@@ -20,7 +64,7 @@ function HomePage() {
 
     setLoading(true);
     try {
-      console.log('Creating room at:', `${API_BASE}/rooms`); // Отладка
+      console.log('Creating room at:', `${API_BASE}/rooms`);
       const response = await axios.post(`${API_BASE}/rooms`, {
         name: newRoomName
       });
@@ -50,19 +94,27 @@ function HomePage() {
 
     setLoading(true);
     try {
-      console.log('Joining room at:', `${API_BASE}/rooms/${inviteLink}`); // Отладка
-      const response = await axios.get(`${API_BASE}/rooms/${inviteLink}`);
+      let cleanCode = inviteLink;
+      if (inviteLink.includes('join=')) {
+        cleanCode = inviteLink.split('join=')[1];
+      }
+      cleanCode = cleanCode.split('&')[0];
+      cleanCode = cleanCode.trim();
+      
+      console.log('Joining room with code:', cleanCode);
+      const response = await axios.get(`${API_BASE}/rooms/${cleanCode}`);
       
       navigate(`/room/${response.data.room_id}`, {
         state: {
           roomId: response.data.room_id,
-          inviteLink: inviteLink,
+          inviteLink: cleanCode,
           roomName: response.data.room_name,
           isHost: false
         }
       });
       
     } catch (error) {
+      console.error('Join room error:', error);
       alert('Комната не найдена или неактивна');
     } finally {
       setLoading(false);
