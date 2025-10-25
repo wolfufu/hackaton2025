@@ -20,9 +20,14 @@ function RoomPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  
+  // Добавлены недостающие состояния
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
 
   const localVideoRef = useRef();
   const remoteVideosRef = useRef({});
+  const messagesEndRef = useRef();
 
   // Отладочная информация
   useEffect(() => {
@@ -252,232 +257,176 @@ function RoomPage() {
     setShowInviteModal(false);
   };
 
+  // Функция для отправки сообщений
+  const sendMessage = () => {
+    if (newMessage.trim() === '') return;
+    
+    const message = {
+      id: Date.now(),
+      sender: currentUser.name,
+      text: newMessage,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    
+    setMessages(prev => [...prev, message]);
+    setNewMessage('');
+    
+    // Прокрутка к последнему сообщению
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   if (!roomId) {
     return <div>Ошибка: Комната не найдена</div>;
   }
 
+  // Подготовка данных для отображения
+  const localParticipant = participants.find(p => p.id === currentUser.id);
+  const remoteParticipants = participants
+    .filter(p => p.id !== currentUser.id)
+    .map(p => ({
+      ...p,
+      stream: remoteStreams[p.id]
+    }));
+
+  const isAudioMuted = !isAudioEnabled;
+  const isVideoOff = !isVideoEnabled;
+
   return (
     <div className="room-page">
+      {/* Header */}
       <header className="room-header">
-        <div className="room-header-content">
-          <div className="room-info">
-            <h2>Комната: {roomName}</h2>
-            <div className="room-details">
-              <span className="room-id">ID: {roomId}</span>
-              <span className="invite-code">Код: {inviteLink}</span>
-              {isHost && <span className="host-badge">👑 Организатор</span>}
-              <div className="connection-status">
-                Статус: {connectionStatus === 'connected' ? '🟢 Подключено' : 
-                        connectionStatus === 'connecting' ? '🟡 Подключение...' : 
-                        '🔴 Ошибка'}
-              </div>
-            </div>
-          </div>
-          
-          <div className="header-controls">
-            <button onClick={openInviteModal} className="invite-btn">
-              📨 Пригласить
-            </button>
-            <button onClick={leaveRoom} className="leave-btn">
-              📞 Выйти
-            </button>
-          </div>
+        <div className="room-info">
+          <h2>{roomName || `Комната ${roomId}`}</h2>
+          <p>Участников: {participants.length} | {isHost ? 'Вы организатор' : 'Участник'}</p>
+        </div>
+        <div className="room-actions">
+          <button onClick={copyInviteLink} className="invite-btn">
+            <span className="material-icons">link</span>
+            Пригласить
+          </button>
+          <button onClick={leaveRoom} className="leave-btn">
+            <span className="material-icons">logout</span>
+            Выйти
+          </button>
         </div>
       </header>
 
-      {error && (
-        <div className="error-message">
-          {error}
-          <div className="error-buttons">
-            <button onClick={initializeWebRTC} className="retry-btn">
-              Попробовать снова
-            </button>
-            <button onClick={restartCamera} className="retry-btn">
-              Перезапустить камеру
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="room-content">
-        <div className="video-container">
-          {/* Локальное видео */}
-          <div className="video-wrapper local-video">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="video-element"
-            />
-            <div className="video-label">
-              Вы {isHost && '👑'} - {currentUser?.name}
-              <div className="status-indicators">
-                {!isAudioEnabled && <span className="muted-indicator">🔇</span>}
-                {!isVideoEnabled && <span className="muted-indicator">❌</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Удаленные видео */}
-          {Object.entries(remoteStreams).map(([userId, stream]) => (
-            <div key={userId} className="video-wrapper remote-video">
-              <video
-                ref={el => remoteVideosRef.current[userId] = el}
-                autoPlay
-                playsInline
-                className="video-element"
-              />
-              <div className="video-label">
-                Участник {userId}
-                <div className="remote-status">
-                  {stream.getVideoTracks().length > 0 ? '📹' : '❌'}
-                  {stream.getAudioTracks().length > 0 ? '🎤' : '🔇'}
+        {/* Видео контейнер */}
+        <section className="video-section">
+          <div className="video-grid">
+            {/* Локальное видео */}
+            {localParticipant && (
+              <div className="video-container local">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="video-element"
+                />
+                <div className="video-overlay">
+                  <span className="user-name">Вы ({currentUser.name})</span>
+                  {isVideoOff && <span className="status">Камера выключена</span>}
+                  {isAudioMuted && <span className="status">Микрофон выключен</span>}
                 </div>
               </div>
-            </div>
-          ))}
+            )}
 
-          {/* Заглушка если нет удаленных видео */}
-          {Object.keys(remoteStreams).length === 0 && (
-            <div className="video-wrapper empty-video">
-              <div className="empty-video-message">
-                <div className="empty-icon">👥</div>
-                <p>Ожидание участников...</p>
-                <p>Отправьте ссылку-приглашение</p>
+            {/* Удаленные видео */}
+            {remoteParticipants.map(participant => (
+              <div key={participant.id} className="video-container remote">
+                <video
+                  ref={el => remoteVideosRef.current[participant.id] = el}
+                  autoPlay
+                  playsInline
+                  className="video-element"
+                  onLoadedMetadata={() => {
+                    if (remoteVideosRef.current[participant.id] && participant.stream) {
+                      remoteVideosRef.current[participant.id].srcObject = participant.stream;
+                    }
+                  }}
+                />
+                <div className="video-overlay">
+                  <span className="user-name">{participant.name}</span>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
 
-        {/* Боковая панель с участниками */}
-        <div className="sidebar">
+          {/* Управление медиа */}
+          <div className="media-controls">
+            <button 
+              onClick={toggleAudio} 
+              className={`control-btn ${isAudioMuted ? 'muted' : ''}`}
+            >
+              <span className="material-icons">
+                {isAudioMuted ? 'mic_off' : 'mic'}
+              </span>
+            </button>
+            <button 
+              onClick={toggleVideo} 
+              className={`control-btn ${isVideoOff ? 'off' : ''}`}
+            >
+              <span className="material-icons">
+                {isVideoOff ? 'videocam_off' : 'videocam'}
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* Чат и участники */}
+        <section className="sidebar">
+          {/* Список участников */}
           <div className="participants-section">
             <h3>Участники ({participants.length})</h3>
             <div className="participants-list">
               {participants.map(participant => (
                 <div key={participant.id} className="participant-item">
                   <span className="participant-name">
-                    {participant.name}
-                    {participant.isHost && ' 👑'}
+                    {participant.name} {participant.id === currentUser.id && '(Вы)'}
                   </span>
-                  <span className="participant-status">
-                    {remoteStreams[participant.id] ? '🟢 Online' : '⚫ Offline'}
-                  </span>
+                  <div className="participant-status">
+                    {participant.id !== currentUser.id && <span className="material-icons online-dot">circle</span>}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="controls-section">
-            <h3>Управление</h3>
-            <div className="control-buttons">
-              <button 
-                onClick={toggleAudio}
-                className={`control-btn ${isAudioEnabled ? 'active' : 'muted'}`}
-              >
-                {isAudioEnabled ? '🔊 Микрофон' : '🔇 Выкл'}
-              </button>
-              <button 
-                onClick={toggleVideo}
-                className={`control-btn ${isVideoEnabled ? 'active' : 'muted'}`}
-              >
-                {isVideoEnabled ? '📹 Камера' : '❌ Выкл'}
-              </button>
-              <button 
-                onClick={restartCamera}
-                className="control-btn restart"
-              >
-                🔄 Перезапустить камеру
-              </button>
-              <button onClick={openInviteModal} className="control-btn invite">
-                📨 Пригласить
-              </button>
-              <button onClick={leaveRoom} className="control-btn leave">
-                📞 Выйти
-              </button>
+          {/* Чат */}
+          <div className="chat-section">
+            <div className="chat-header">
+              <h3>Чат</h3>
             </div>
-          </div>
+            
+            <div className="messages-container">
+              {messages.map(message => (
+                <div key={message.id} className="message">
+                  <strong>{message.sender}:</strong> {message.text}
+                  <span className="timestamp">{message.timestamp}</span>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
 
-          {/* Информация о комнате */}
-          <div className="room-info-section">
-            <h3>Информация о комнате</h3>
-            <div className="room-info-details">
-              <div className="info-item">
-                <span className="info-label">ID комнаты:</span>
-                <span className="info-value">{roomId}</span>
-              </div>
-              <div className="info-item">
-                <span className="info-label">Код приглашения:</span>
-                <span className="info-value">{inviteLink}</span>
-              </div>
-              <div className="info-item">
-                <span className="info-label">Статус:</span>
-                <span className={`info-value status-${connectionStatus}`}>
-                  {connectionStatus === 'connected' ? 'Подключено' : 
-                   connectionStatus === 'connecting' ? 'Подключение...' : 'Ошибка'}
-                </span>
-              </div>
+            <div className="message-input">
+              <input
+                type="text"
+                placeholder="Введите сообщение..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              />
+              <button onClick={sendMessage}>
+                <span className="material-icons">send</span>
+              </button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
-
-      {/* Нижние контролы для мобильных устройств */}
-      <div className="mobile-controls">
-        <button 
-          onClick={toggleAudio}
-          className={`control-btn ${isAudioEnabled ? 'active' : 'muted'}`}
-        >
-          {isAudioEnabled ? '🔊' : '🔇'}
-        </button>
-        <button 
-          onClick={toggleVideo}
-          className={`control-btn ${isVideoEnabled ? 'active' : 'muted'}`}
-        >
-          {isVideoEnabled ? '📹' : '❌'}
-        </button>
-        <button onClick={restartCamera} className="control-btn restart">
-          🔄
-        </button>
-        <button onClick={openInviteModal} className="control-btn invite">
-          📨
-        </button>
-        <button onClick={leaveRoom} className="control-btn leave">
-          📞
-        </button>
-      </div>
-
-      {/* Модальное окно приглашения */}
-      {showInviteModal && (
-        <div className="modal-overlay" onClick={closeInviteModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3>Пригласить в комнату</h3>
-            <p>Отправьте эту ссылку участникам:</p>
-            <div className="invite-link-container">
-              <code className="invite-link">
-                {window.location.origin}/?join={inviteLink}
-              </code>
-            </div>
-            <div className="modal-buttons">
-              <button onClick={copyInviteLink} className="copy-btn">
-                📋 Скопировать ссылку
-              </button>
-              <button onClick={closeInviteModal} className="close-btn">
-                Закрыть
-              </button>
-            </div>
-            <div className="invite-tips">
-              <p><strong>Советы:</strong></p>
-              <ul>
-                <li>Отправьте ссылку через мессенджер или email</li>
-                <li>Убедитесь, что участник имеет стабильное интернет-соединение</li>
-                <li>Попросите участника разрешить доступ к камере и микрофону</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

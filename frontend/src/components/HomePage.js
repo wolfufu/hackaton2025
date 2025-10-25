@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import axios from 'axios';
 import './HomePage.css';
 import { API_BASE } from '../config';
+import logoIcon from './logo-icon.svg';
 
 function HomePage() {
   const [newRoomName, setNewRoomName] = useState('');
@@ -121,64 +122,79 @@ function HomePage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Ошибка при выходе:', error);
+    }
+  };
+
   return (
     <div className="home-page">
       <header className="home-header">
-        <div className="header-content">
-          <h1>🎥 Video Conference</h1>
+        <div className='home-logo-icon'>
+            <h3>ТЕЛЕВИД</h3>
+            <img src={logoIcon} alt="Logo Icon" />
+        </div>
+        <div className='home-buttons'>
           <div className="user-menu">
-            <span>Привет, {currentUser.name}!</span>
-            <button onClick={logout} className="logout-btn">Выйти</button>
+            <span className="user-greeting">Привет, {currentUser.name}!</span>
+            <button onClick={handleLogout} className="logout-button">
+              Выйти
+            </button>
           </div>
         </div>
-        <p>Создайте или присоединитесь к видеовстрече</p>
       </header>
 
-      <div className="home-content">
-        <section className="create-section">
-          <h2>Создать новую комнату</h2>
-          <div className="input-group">
-            <input
-              type="text"
-              placeholder="Название комнаты"
-              value={newRoomName}
-              onChange={(e) => setNewRoomName(e.target.value)}
-              disabled={loading}
-            />
-            <button 
-              onClick={createRoom} 
-              disabled={loading || !newRoomName.trim()}
-              className="create-btn"
-            >
-              {loading ? 'Создание...' : 'Создать комнату'}
-            </button>
-          </div>
+      <main className="home-content">
+        <section className="welcome-section">
+          <h2>Добро пожаловать в видеоконференции</h2>
+          <p>Создайте новую комнату или присоединитесь к существующей</p>
         </section>
+        
+        <section className='boxes'>
+          <section className="action-section">
+            <h3>Создать новую комнату</h3>
+            <div className="input-group">
+              <input
+                type="text"
+                placeholder="Название комнаты"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                disabled={loading}
+              />
+              <button 
+                onClick={createRoom} 
+                disabled={loading || !newRoomName.trim()}
+                className="action-button create-btn"
+              >
+                {loading ? 'Создание...' : 'Создать комнату'}
+              </button>
+            </div>
+          </section>
 
-        <div className="divider">
-          <span>или</span>
-        </div>
-
-        <section className="join-section">
-          <h2>Присоединиться к комнате</h2>
-          <div className="input-group">
-            <input
-              type="text"
-              placeholder="Ссылка-приглашение"
-              value={inviteLink}
-              onChange={(e) => setInviteLink(e.target.value)}
-              disabled={loading}
-            />
-            <button 
-              onClick={joinRoom} 
-              disabled={loading || !inviteLink.trim()}
-              className="join-btn"
-            >
-              {loading ? 'Вход...' : 'Присоединиться'}
-            </button>
-          </div>
+          <section className="action-section">
+            <h3>Присоединиться к комнате</h3>
+            <div className="input-group">
+              <input
+                type="text"
+                placeholder="Ссылка-приглашение"
+                value={inviteLink}
+                onChange={(e) => setInviteLink(e.target.value)}
+                disabled={loading}
+              />
+              <button 
+                onClick={joinRoom} 
+                disabled={loading || !inviteLink.trim()}
+                className="action-button join-btn"
+              >
+                {loading ? 'Вход...' : 'Присоединиться'}
+              </button>
+            </div>
+          </section>
         </section>
-      </div>
+      </main>
     </div>
   );
 }

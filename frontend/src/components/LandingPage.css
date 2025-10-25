@@ -1,0 +1,288 @@
+/* LandingPage.css */
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@200..900&display=swap');
+
+:root {
+  --lime: #D2FF42ff;
+  --orange: #FFA531;
+  --black: rgb(0, 0, 0);
+  --white: #FFFEFDff;
+  --purple: #CCA4E3;
+}
+
+body {
+  font-family: "Unbounded", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(255, 250, 240, 0.8) 25%, 
+    rgba(240, 248, 255, 0.7) 50%, 
+    rgba(245, 245, 255, 0.8) 75%, 
+    rgba(255, 255, 255, 0.9) 100%);
+  background-attachment: fixed;
+}
+
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 1;
+}
+
+.lp-logo-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lp-logo-icon h3 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: #333;
+  background: linear-gradient(135deg, var(--purple), var(--orange));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lp-logo-icon img {
+  height: 30px;
+  width: auto;
+}
+
+.lp-buttons {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.auth-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Общие стили для всех кнопок */
+.login-button,
+.logout-button,
+.cta-button {
+  padding: 12px 24px;
+  border-radius: 3px;
+  text-decoration: none;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  font-family: "Unbounded", sans-serif;
+  border: 0.15rem solid;
+  cursor: pointer;
+  font-size: 14px;
+  border-color: var(--black);
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+  background-color: var(--purple);
+  color: var(--black);
+  box-shadow: 
+    0.3rem 0.3rem 0 -0.25rem var(--black),
+    0.3rem 0.3rem 0 0 var(--black);
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Псевдоэлемент для градиента */
+.login-button::before,
+.logout-button::before,
+.cta-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--purple) 0%,
+    var(--orange) 25%,
+    var(--purple) 50%,
+    var(--orange) 75%,
+    var(--purple) 100%
+  );
+  background-size: 200% 100%;
+  transition: left 0.5s ease;
+  z-index: -1;
+  opacity: 0;
+}
+
+.login-button:hover::before,
+.logout-button:hover::before,
+.cta-button:hover::before {
+  left: 0;
+  opacity: 1;
+  animation: gradientFlow 2s linear infinite;
+}
+
+/* Анимация переливающегося градиента */
+@keyframes gradientFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.login-button:hover,
+.logout-button:hover,
+.cta-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 
+    0.4rem 0.4rem 0 -0.25rem var(--black),
+    0.4rem 0.4rem 0 0 var(--black);
+  color: var(--white);
+  scale: 1.02;
+}
+
+.login-button:active,
+.logout-button:active,
+.cta-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 
+    0.1rem 0.1rem 0 -0.25rem var(--black),
+    0.1rem 0.1rem 0 0 var(--black);
+}
+
+/* Для Link-кнопок */
+.cta-button,
+.login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-divider {
+  color: #666;
+  font-size: 14px;
+}
+
+.landing-content {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: left;
+  padding: 2rem;
+  padding-top: 6rem;
+  gap: 20rem;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  max-width: 500px;
+}
+
+.user-welcome h2,
+.guest-welcome h2 {
+  margin-bottom: 1rem;
+  font-size: 2.5rem;
+  text-align: left;
+  background: linear-gradient(135deg, var(--black), #444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.guest-welcome p {
+  margin-bottom: 1.5rem;
+  color: #666;
+  font-size: 1.2rem;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.picture img {
+  width: auto;
+  height: 450px;
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.1));
+}
+
+header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Декоративные элементы для фона */
+.landing-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(204, 164, 227, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 165, 49, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(210, 255, 66, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .landing-content {
+    flex-direction: column-reverse;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 2rem;
+    padding: 1rem;
+    padding-top: 3rem;
+  }
+  
+  .auth-section {
+    align-items: center;
+    text-align: center;
+  }
+  
+  .user-welcome h2,
+  .guest-welcome h2 {
+    text-align: center;
+    font-size: 2rem;
+  }
+  
+  .guest-welcome p {
+    text-align: center;
+    font-size: 1.1rem;
+  }
+  
+  .picture img {
+    height: 250px;
+  }
+  
+  .landing-header {
+    padding: 1rem;
+  }
+}

@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import HomePage from './components/HomePage';
 import RoomPage from './components/RoomPage';
+import LandingPage from './components/LandingPage';
 import './App.css';
 
 function AuthWrapper() {
@@ -12,7 +13,7 @@ function AuthWrapper() {
   const { currentUser } = useAuth();
 
   if (currentUser) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   return isLogin ? (
@@ -33,9 +34,15 @@ function App() {
       <Router>
         <div className="App">
           <Routes>
+            {/* Публичная стартовая страница */}
+            <Route path="/" element={<LandingPage />} />
+            
+            {/* Страница аутентификации */}
             <Route path="/auth" element={<AuthWrapper />} />
+            
+            {/* Защищенные маршруты */}
             <Route 
-              path="/" 
+              path="/home" 
               element={
                 <ProtectedRoute>
                   <HomePage />
