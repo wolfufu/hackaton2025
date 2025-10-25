@@ -1,3 +1,5 @@
+import os
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -13,17 +15,34 @@ from webrtc import router as webrtc_router
 
 from database import Base, engine
 
+
 # Создаем таблицы в БД
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="Conference API",
+    description="WebRTC Conference API",
+    version="1.0.0",
+    servers=[
+        {"url": "http://83.234.174.96:8000", "description": "Production server"},
+        {"url": "http://localhost:8000", "description": "Local development"},
+    ]
+)
+
+# CORS настройки для продакшена
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000", 
+    "http://83.234.174.96:3000",  # ваш React фронтенд
+    "http://83.234.174.96:8000",
+]
 
 app.include_router(webrtc_router, prefix="/api")
 
 # Настройка CORS для React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,32 +106,6 @@ def get_current_user(current_user: User = Depends(auth.get_current_user)):
     return current_user
 
 # Обновляем создание комнаты с авторизацией
-@app.post("/api/rooms", response_model=schemas.RoomResponse)
-def create_room(
-    room_data: schemas.RoomCreate,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Создание комнаты с уникальной ссылкой"""
-    # Генерируем уникальную ссылку
-    invite_link = generate_invite_link()
-    
-    # Проверяем, что ссылка уникальна
-    while db.query(Room).filter(Room.invite_link == invite_link).first():
-        invite_link = generate_invite_link()
-    
-    # Создаем комнату
-    db_room = Room(
-        name=room_data.name,
-        invite_link=invite_link,
-        created_by=current_user.id
-    )
-    
-    db.add(db_room)
-    db.commit()
-    db.refresh(db_room)
-    
-    return db_room
 
 
 @app.get("/")
@@ -142,8 +135,13 @@ def generate_invite_link(length=10):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-@app.post("/api/rooms")
-def create_room(room_data: schemas.RoomCreate, db: Session = Depends(get_db)):
+
+@app.post("/api/rooms", response_model=schemas.RoomResponse)
+def create_room(
+    room_data: schemas.RoomCreate,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
     """Создание комнаты с уникальной ссылкой"""
     # Генерируем уникальную ссылку
     invite_link = generate_invite_link()
@@ -156,14 +154,24 @@ def create_room(room_data: schemas.RoomCreate, db: Session = Depends(get_db)):
     db_room = Room(
         name=room_data.name,
         invite_link=invite_link,
-        created_by=room_data.created_by
+        created_by=current_user.id
     )
     
     db.add(db_room)
     db.commit()
     db.refresh(db_room)
     
-    return {"room_id": db_room.id, "invite_link": invite_link}
+    return db_room
+
+@app.websocket("/ws/test/{room_id}")
+async def simple_websocket(websocket: WebSocket, room_id: str):
+    await manager.connect(websocket, f"test_{room_id}")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.broadcast({"message": data}, f"test_{room_id}")
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket, f"test_{room_id}")
 
 @app.get("/api/rooms/{invite_link}")
 def join_room(invite_link: str, db: Session = Depends(get_db)):

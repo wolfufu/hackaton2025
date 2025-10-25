@@ -37,47 +37,58 @@ class WebRTCManager {
     }
   }
 
-  // Подключение к WebSocket
-  connectWebSocket() {
-    this.websocket = new WebSocket(`ws://localhost:8000/api/ws/webrtc/${this.roomId}/${this.userId}`);
-    
-    this.websocket.onopen = () => {
-        console.log('WebRTC WebSocket connected');
-    };
-
-    this.websocket.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
+  // WebRTCManager.js - обнови connectWebSocket
+connectWebSocket() {
+    return new Promise((resolve, reject) => {
+        this.websocket = new WebSocket(`ws://83.234.174.96:8000/api/ws/webrtc/${this.roomId}/${this.userId}`);
         
-        // Игнорируем сообщения от самого себя
-        if (data.from_user_id === this.userId) return;
-        
-        switch (data.type) {
-            case 'offer':
-                await this.handleOffer(data.offer, data.from_user_id);
-                break;
-            case 'answer':
-                await this.handleAnswer(data.answer, data.from_user_id);
-                break;
-            case 'ice-candidate':
-                await this.handleIceCandidate(data.candidate, data.from_user_id);
-                break;
-            case 'user_joined':
-                // Игнорируем уведомление о своем подключении
-                if (data.user_id !== this.userId) {
-                    await this.createOffer(data.user_id);
-                }
-                break;
-            case 'user_left':
-                if (data.user_id !== this.userId) {
-                    this.handleUserLeft(data.user_id);
-                }
-                break;
-        }
-    };
+        this.websocket.onopen = () => {
+            console.log('WebRTC WebSocket connected');
+            resolve();
+        };
 
-    this.websocket.onclose = () => {
-        console.log('WebRTC WebSocket disconnected');
-    };
+        this.websocket.onerror = (error) => {
+            console.error('WebRTC WebSocket error:', error);
+            reject(error);
+        };
+
+        this.websocket.onclose = (event) => {
+            console.log('WebRTC WebSocket disconnected:', event.code, event.reason);
+        };
+
+        this.websocket.onmessage = async (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Игнорируем сообщения от самого себя
+                if (data.from_user_id === this.userId) return;
+                
+                switch (data.type) {
+                    case 'offer':
+                        await this.handleOffer(data.offer, data.from_user_id);
+                        break;
+                    case 'answer':
+                        await this.handleAnswer(data.answer, data.from_user_id);
+                        break;
+                    case 'ice-candidate':
+                        await this.handleIceCandidate(data.candidate, data.from_user_id);
+                        break;
+                    case 'user_joined':
+                        if (data.user_id !== this.userId) {
+                            await this.createOffer(data.user_id);
+                        }
+                        break;
+                    case 'user_left':
+                        if (data.user_id !== this.userId) {
+                            this.handleUserLeft(data.user_id);
+                        }
+                        break;
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+    });
 }
 
   // Создание PeerConnection
