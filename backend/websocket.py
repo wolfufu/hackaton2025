@@ -11,6 +11,7 @@ class ConnectionManager:
         self.active_connections: Dict[str, List[WebSocket]] = {}
     
     async def connect(self, websocket: WebSocket, room_id: str):
+        # Принимаем соединение без дополнительных проверок
         await websocket.accept()
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
@@ -32,7 +33,7 @@ class ConnectionManager:
             await websocket.send_json(message)
         except Exception as e:
             logger.error(f"Error sending personal message: {e}")
-            await self.disconnect(websocket, "unknown")  # room_id будет уточнен
+            await self.disconnect(websocket, "unknown")
     
     async def broadcast(self, message: dict, room_id: str):
         if room_id not in self.active_connections:

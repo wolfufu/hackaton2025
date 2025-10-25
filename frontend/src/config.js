@@ -1,25 +1,23 @@
 // src/config.js
-// src/config.js
-export const API_BASE_URL = "http://83.234.174.96:8000/api";
-export const WS_BASE_URL = "ws://83.234.174.96:8000";
-
-// Или для разработки:
-// export const API_BASE_URL = "http://localhost:8000/api";
-// export const WS_BASE_URL = "ws://localhost:8000";
 const getConfig = () => {
-  // В продакшене API будет через nginx proxy
-  if (process.env.NODE_ENV === 'production') {
+  const hostname = window.location.hostname;
+  
+  console.log('Current hostname:', hostname); // Для отладки
+  
+  // Для локальной разработки
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return {
-      API_BASE: '/api',
-      WS_BASE: window.location.protocol === 'https:' ? 'wss://' + window.location.host : 'ws://' + window.location.host
+      API_BASE: 'http://localhost:8000/api',
+      WS_BASE: 'ws://localhost:8000'
+    };
+  } 
+  // Для подключения по сети
+  else {
+    return {
+      API_BASE: `http://${hostname}:8000/api`,
+      WS_BASE: `ws://${hostname}:8000`
     };
   }
-  
-  // Локальная разработка
-  return {
-    API_BASE: 'http://localhost:8000/api',
-    WS_BASE: 'ws://localhost:8000'
-  };
 };
 
 export const { API_BASE, WS_BASE } = getConfig();
