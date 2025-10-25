@@ -23,9 +23,18 @@ app = FastAPI()
 
 # CORS настройки для продакшена
 origins = [
-    "http://138.124.14.215",
-    "http://localhost",
     "http://localhost:3000",
+    "http://localhost:3001", 
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://10.241.117.59:3000",
+    "http://10.241.117.59:3001",
+    "http://10.241.117.59:3002",
+    "http://10.241.117.59:3003",
+    "http://10.241.117.189:3000",  # второй ноутбук
+    "http://10.241.117.189:3001",
+    "http://10.241.117.189:3002", 
+    "http://10.241.117.189:3003",
 ]
 
 app.include_router(webrtc_router, prefix="/api")
@@ -33,7 +42,7 @@ app.include_router(webrtc_router, prefix="/api")
 # Настройка CORS для React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Разрешить ВСЕ источники
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
