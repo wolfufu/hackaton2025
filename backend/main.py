@@ -15,6 +15,7 @@ from webrtc import router as webrtc_router
 
 from database import Base, engine
 
+
 # Создаем таблицы в БД
 Base.metadata.create_all(bind=engine)
 
