@@ -40,7 +40,7 @@ class WebRTCManager {
   // WebRTCManager.js - обнови connectWebSocket
 connectWebSocket() {
     return new Promise((resolve, reject) => {
-        this.websocket = new WebSocket(`ws://${window.location.hostname}:8000/api/ws/webrtc/${this.roomId}/${this.userId}`);
+        this.websocket = new WebSocket(`ws://83.234.174.96:8000/api/ws/webrtc/${this.roomId}/${this.userId}`);
         
         this.websocket.onopen = () => {
             console.log('WebRTC WebSocket connected');

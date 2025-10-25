@@ -19,7 +19,15 @@ from database import Base, engine
 # Создаем таблицы в БД
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="Conference API",
+    description="WebRTC Conference API",
+    version="1.0.0",
+    servers=[
+        {"url": "http://83.234.174.96:8000", "description": "Production server"},
+        {"url": "http://localhost:8000", "description": "Local development"},
+    ]
+)
 
 # CORS настройки для продакшена
 origins = [
