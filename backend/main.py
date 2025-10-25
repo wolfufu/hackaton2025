@@ -19,22 +19,13 @@ from database import Base, engine
 # Создаем таблицы в БД
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Conference API",
-    description="WebRTC Conference API",
-    version="1.0.0",
-    servers=[
-        {"url": "http://83.234.174.96:8000", "description": "Production server"},
-        {"url": "http://localhost:8000", "description": "Local development"},
-    ]
-)
+app = FastAPI()
 
 # CORS настройки для продакшена
 origins = [
+    "http://138.124.14.215",
+    "http://localhost",
     "http://localhost:3000",
-    "http://127.0.0.1:3000", 
-    "http://83.234.174.96:3000",  # ваш React фронтенд
-    "http://83.234.174.96:8000",
 ]
 
 app.include_router(webrtc_router, prefix="/api")

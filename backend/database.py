@@ -7,8 +7,7 @@ from sqlalchemy.orm import sessionmaker
 # Для локальной разработки можно оставить localhost
 import os
 
-DATABASE_URL = "postgresql+psycopg2://postgres:password@localhost:5432/conference_db"
-
+DATABASE_URL = "sqlite:///./conference.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
