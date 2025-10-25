@@ -1,15 +1,21 @@
+# database.py
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Синхронная версия
-DATABASE_URL = "postgresql://postgres:password@localhost/conference_db"
+# Для Docker используй 'postgres' вместо 'localhost'
+# Для локальной разработки можно оставить localhost
+import os
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://postgres:password@postgres:5432/conference_db"
+)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Функция для получения сессии БД
 def get_db():
     db = SessionLocal()
     try:
