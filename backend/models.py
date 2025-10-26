@@ -1,8 +1,10 @@
-# models.py
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
+# models.py - УБЕДИТЕСЬ ЧТО ВСЕ ИМПОРТЫ ПРАВИЛЬНЫЕ
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from database import Base
 import bcrypt
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -10,16 +12,17 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     name = Column(String)
-    password_hash = Column(String)  # Добавляем хеш пароля
+    password_hash = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Связи
+    messages = relationship("Message", back_populates="user")
+    
     def set_password(self, password: str):
-        """Хеширование пароля"""
         salt = bcrypt.gensalt()
         self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
     
     def check_password(self, password: str) -> bool:
-        """Проверка пароля"""
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
 
 class Room(Base):
@@ -31,6 +34,9 @@ class Room(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
+    
+    # Связи
+    messages = relationship("Message", back_populates="room")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -40,6 +46,10 @@ class Message(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     content = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Связи
+    room = relationship("Room", back_populates="messages")
+    user = relationship("User", back_populates="messages")
 
 class RoomParticipant(Base):
     __tablename__ = "room_participants"

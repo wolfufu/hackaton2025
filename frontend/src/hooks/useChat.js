@@ -1,96 +1,122 @@
-// useChat.js - ОБНОВЛЕННАЯ ВЕРСИЯ С ОТЛАДКОЙ
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_BASE } from '../config';
 
-export const useChat = (webrtcManager, currentUser) => {
+export const useChat = (webrtcManager, currentUser, roomId) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    if (roomId && currentUser) {
+      loadMessageHistory();
+    }
+  }, [roomId, currentUser]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const loadMessageHistory = async () => {
+    if (!roomId) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${API_BASE}/rooms/${roomId}/messages`);
+      
+      if (response.ok) {
+        const history = await response.json();
+        const formattedMessages = history.map(msg => ({
+          id: msg.id,
+          message: msg.content || msg.message,
+          userName: msg.user_name,
+          timestamp: new Date(msg.created_at || msg.timestamp),
+          isOwn: msg.user_id === currentUser.id
+        }));
+        
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!webrtcManager) return;
 
-    // ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ МЕТОДА ПЕРЕД ВЫЗОВОМ
-    if (typeof webrtcManager.setChatMessageHandler === 'function') {
-      webrtcManager.setChatMessageHandler((message) => {
-        setMessages(prev => [...prev, message]);
+    const handleWebSocketMessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'chat_message') {
+          const chatMessage = {
+            id: data.id || Date.now(),
+            message: data.content || data.message,
+            userName: data.user_name,
+            timestamp: new Date(data.created_at || data.timestamp),
+            isOwn: data.user_id === currentUser.id.toString()
+          };
+          
+          setMessages(prev => [...prev, chatMessage]);
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    };
+
+    const originalOnMessage = webrtcManager.websocket.onmessage;
+    
+    webrtcManager.websocket.onmessage = (event) => {
+      handleWebSocketMessage(event);
+
+      if (originalOnMessage) {
+        originalOnMessage.call(webrtcManager.websocket, event);
+      }
+    };
+
+    return () => {
+      if (webrtcManager.websocket) {
+        webrtcManager.websocket.onmessage = originalOnMessage;
+      }
+    };
+  }, [webrtcManager, currentUser]);
+
+  const sendMessage = useCallback(async () => {
+    if (!newMessage.trim() || !webrtcManager || !roomId) return;
+
+    const messageToSend = newMessage.trim();
+    
+    try {
+      webrtcManager.sendWebSocketMessage({
+        type: 'chat_message',
+        message: messageToSend
       });
-    } else {
-      console.warn('WebRTCManager does not support chat');
+      
+      setNewMessage('');
+      
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      alert('Ошибка отправки сообщения');
     }
-
-  }, [webrtcManager]);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  const handleChatMessage = useCallback((data) => {
-    const { from_user_id, message, timestamp, user_name } = data;
-    
-    console.log('💬 handleChatMessage called with data:', data);
-    
-    setMessages(prev => [...prev, {
-      id: Date.now() + Math.random(),
-      userId: from_user_id,
-      userName: user_name || `Участник ${from_user_id}`,
-      message: message,
-      timestamp: timestamp || new Date().toISOString(),
-      isOwn: from_user_id === currentUser?.id?.toString()
-    }]);
-  }, [currentUser]);
-
-  const sendMessage = useCallback(() => {
-    console.log('🔄 sendMessage called, newMessage:', newMessage);
-    
-    if (!newMessage.trim()) {
-      console.warn('❌ Cannot send empty message');
-      return;
-    }
-
-    if (!webrtcManager) {
-      console.error('❌ WebRTC manager not available');
-      return;
-    }
-
-    console.log(`💬 Sending message via WebRTCManager: "${newMessage}"`);
-    
-    webrtcManager.sendChatMessage(newMessage.trim(), currentUser.name);
-    setNewMessage('');
-  }, [newMessage, webrtcManager, currentUser]);
-
-  const handleKeyPress = useCallback((e) => {
-    console.log('⌨️ Key pressed in useChat:', e.key);
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }, [sendMessage]);
+  }, [newMessage, webrtcManager, roomId]);
 
   const clearChat = useCallback(() => {
-    console.log('🧹 Clearing chat');
     setMessages([]);
   }, []);
-
-  useEffect(() => {
-    if (webrtcManager) {
-      console.log('✅ Registering chat handler in WebRTCManager');
-      webrtcManager.setChatMessageHandler(handleChatMessage);
-    } else {
-      console.log('⚠️ WebRTCManager not available for chat handler');
-    }
-  }, [webrtcManager, handleChatMessage]);
 
   return {
     messages,
     newMessage,
     setNewMessage,
     sendMessage,
-    handleKeyPress,
     clearChat,
+    isLoading,
     messagesEndRef
   };
 };

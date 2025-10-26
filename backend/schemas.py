@@ -2,7 +2,9 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
-
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr
+from datetime import datetime
 class UserBase(BaseModel):
     email: EmailStr
     name: str
@@ -56,6 +58,20 @@ class RoomResponse(RoomBase):
     created_at: datetime
     is_active: bool
     created_by: int
+    
+    class Config:
+        from_attributes = True
+
+class MessageBase(BaseModel):
+    content: str
+class MessageCreate(MessageBase):
+    room_id: int
+
+class MessageResponse(MessageBase):
+    id: int
+    user_id: int
+    user_name: str
+    created_at: datetime
     
     class Config:
         from_attributes = True
