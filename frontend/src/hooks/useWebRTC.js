@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import WebRTCManager from '../components/WebRTCManager';
 
 export const useWebRTC = (roomId, currentUser, isHost) => {
@@ -10,7 +10,7 @@ export const useWebRTC = (roomId, currentUser, isHost) => {
   const [error, setError] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
-  const initializeWebRTC = async () => {
+  const initializeWebRTC = useCallback(async () => {
     try {
       setConnectionStatus('connecting');
       const manager = new WebRTCManager(
@@ -33,9 +33,9 @@ export const useWebRTC = (roomId, currentUser, isHost) => {
       setConnectionStatus('error');
       throw error;
     }
-  };
+  }, [roomId, currentUser]);
 
-  const handleRemoteStream = (userId, stream) => {
+  const handleRemoteStream = useCallback((userId, stream) => {
     console.log('🎬 Remote stream received from:', userId, 'Tracks:', stream.getTracks().length);
     
     // Проверяем что поток содержит треки
@@ -48,35 +48,35 @@ export const useWebRTC = (roomId, currentUser, isHost) => {
       ...prev,
       [userId]: stream
     }));
-  };
+  }, []);
 
-  const handleUserLeft = (userId) => {
+  const handleUserLeft = useCallback((userId) => {
     setRemoteStreams(prev => {
       const newStreams = { ...prev };
       delete newStreams[userId];
       return newStreams;
     });
-  };
+  }, []);
 
-  const toggleAudio = () => {
+  const toggleAudio = useCallback(() => {
     if (webrtcManager) {
       const enabled = webrtcManager.toggleAudio();
       setIsAudioEnabled(enabled);
       return enabled;
     }
     return false;
-  };
+  }, [webrtcManager]);
 
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(() => {
     if (webrtcManager) {
       const enabled = webrtcManager.toggleVideo();
       setIsVideoEnabled(enabled);
       return enabled;
     }
     return false;
-  };
+  }, [webrtcManager]);
 
-  const restartCamera = async () => {
+  const restartCamera = useCallback(async () => {
     if (webrtcManager) {
       try {
         const newStream = await webrtcManager.restartMedia();
@@ -88,13 +88,13 @@ export const useWebRTC = (roomId, currentUser, isHost) => {
         throw error;
       }
     }
-  };
+  }, [webrtcManager]);
 
-  const destroy = () => {
+  const destroy = useCallback(() => {
     if (webrtcManager) {
       webrtcManager.destroy();
     }
-  };
+  }, [webrtcManager]);
 
   return {
     webrtcManager,

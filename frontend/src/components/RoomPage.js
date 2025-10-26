@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import WebRTCManager from './WebRTCManager';
 import './RoomPage.css';
-import { WS_BASE } from '../config';
 
+// Совместимый RoomPage.js для работы с обоими фронтендами
 function RoomPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -20,83 +20,15 @@ function RoomPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  
-  // Добавлены недостающие состояния
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
 
   const localVideoRef = useRef();
   const remoteVideosRef = useRef({});
-  const messagesEndRef = useRef();
 
-  // Отладочная информация
   useEffect(() => {
-    console.log('🔍 Room Debug Info:', {
-      roomId,
-      currentUserId: currentUser?.id,
-      currentUserName: currentUser?.name,
-      isHost,
-      participantsCount: participants.length,
-      remoteStreamsCount: Object.keys(remoteStreams).length
-    });
-  }, [roomId, currentUser, isHost, participants, remoteStreams]);
-
-  // WebSocket для синхронизации участников
-  useEffect(() => {
-    if (!roomId || !currentUser) return;
-
-    const syncWs = new WebSocket(`${WS_BASE}/ws/${roomId}`);
+    console.log('🚀 RoomPage mounted with:', { roomId, currentUserId: currentUser?.id, isHost });
     
-    syncWs.onopen = () => {
-      console.log('🔄 Sync WebSocket connected');
-      syncWs.send(JSON.stringify({
-        type: 'user_joined',
-        user_id: currentUser.id,
-        user_name: currentUser.name,
-        is_host: isHost
-      }));
-    };
-
-    syncWs.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'user_joined' && data.user_id !== currentUser.id) {
-          console.log('🔄 Sync: New user joined:', data.user_name);
-          setParticipants(prev => {
-            if (!prev.find(p => p.id === data.user_id)) {
-              return [...prev, {
-                id: data.user_id,
-                name: data.user_name,
-                isHost: data.is_host
-              }];
-            }
-            return prev;
-          });
-        }
-        
-        if (data.type === 'user_left') {
-          console.log('🔄 Sync: User left:', data.user_id);
-          setParticipants(prev => prev.filter(p => p.id !== data.user_id));
-        }
-        
-      } catch (error) {
-        console.error('Sync WebSocket error:', error);
-      }
-    };
-
-    syncWs.onclose = () => {
-      console.log('🔄 Sync WebSocket disconnected');
-    };
-
-    return () => {
-      syncWs.close();
-    };
-  }, [roomId, currentUser, isHost]);
-
-  // Инициализация WebRTC
-  useEffect(() => {
     if (!roomId || !currentUser) {
+      console.warn('❌ Missing roomId or currentUser, redirecting to home');
       navigate('/');
       return;
     }
@@ -104,15 +36,25 @@ function RoomPage() {
     initializeWebRTC();
 
     return () => {
+      console.log('🧹 RoomPage unmounting, cleaning up WebRTC');
       if (webrtcManager) {
         webrtcManager.destroy();
       }
     };
   }, [roomId, currentUser]);
 
+  useEffect(() => {
+    console.log('📊 Remote streams updated:', Object.keys(remoteStreams).length);
+    Object.entries(remoteStreams).forEach(([userId, stream]) => {
+      console.log(`📹 User ${userId} has stream:`, stream.getTracks().length > 0);
+    });
+  }, [remoteStreams]);
+
   const initializeWebRTC = async () => {
     try {
+      console.log('🎯 Initializing WebRTC for room:', roomId);
       setConnectionStatus('connecting');
+      
       const manager = new WebRTCManager(
         roomId,
         currentUser.id.toString(),
@@ -121,12 +63,15 @@ function RoomPage() {
       );
 
       const stream = await manager.initialize();
+      console.log('✅ WebRTC initialized successfully');
+      
       setWebrtcManager(manager);
       setLocalStream(stream);
       setConnectionStatus('connected');
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        console.log('🎥 Local video element updated');
       }
 
       // Добавляем текущего пользователя в список участников
@@ -137,14 +82,21 @@ function RoomPage() {
       }]);
 
     } catch (error) {
-      console.error('Failed to initialize WebRTC:', error);
+      console.error('❌ Failed to initialize WebRTC:', error);
       setError('Не удалось получить доступ к камере/микрофону. Проверьте разрешения.');
       setConnectionStatus('error');
     }
   };
 
   const handleRemoteStream = (userId, stream) => {
-    console.log('🎬 Handling remote stream from:', userId);
+    console.log('🎬 Remote stream received from:', userId, 'Tracks:', stream.getTracks().length);
+    
+    // Проверяем что поток содержит треки
+    if (stream.getTracks().length === 0) {
+      console.warn('⚠️ Empty stream received from:', userId);
+      return;
+    }
+
     setRemoteStreams(prev => ({
       ...prev,
       [userId]: stream
@@ -166,19 +118,20 @@ function RoomPage() {
     setTimeout(() => {
       if (remoteVideosRef.current[userId]) {
         remoteVideosRef.current[userId].srcObject = stream;
-        console.log('✅ Remote video stream set for user:', userId);
+        console.log('✅ Video element updated for user:', userId);
       }
     }, 100);
   };
 
   const handleUserLeft = (userId) => {
-    console.log('👤 User left:', userId);
+    console.log('👋 User left:', userId);
     setRemoteStreams(prev => {
       const newStreams = { ...prev };
       delete newStreams[userId];
       return newStreams;
     });
 
+    // Удаляем пользователя из списка участников
     setParticipants(prev => prev.filter(p => p.id.toString() !== userId.toString()));
   };
 
@@ -189,37 +142,10 @@ function RoomPage() {
     }
   };
 
-  const toggleVideo = async () => {
+  const toggleVideo = () => {
     if (webrtcManager) {
-      try {
-        const enabled = webrtcManager.toggleVideo();
-        setIsVideoEnabled(enabled);
-        
-        // Если включаем видео, но поток пустой - перезапускаем камеру
-        if (enabled && localStream && localStream.getVideoTracks().length === 0) {
-          await restartCamera();
-        }
-      } catch (error) {
-        console.error('Error toggling video:', error);
-      }
-    }
-  };
-
-  const restartCamera = async () => {
-    if (webrtcManager) {
-      try {
-        console.log('🔄 Restarting camera...');
-        const newStream = await webrtcManager.restartMedia();
-        setLocalStream(newStream);
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = newStream;
-        }
-        setIsVideoEnabled(true);
-        console.log('✅ Camera restarted successfully');
-      } catch (error) {
-        console.error('Failed to restart camera:', error);
-        alert('Не удалось перезапустить камеру');
-      }
+      const enabled = webrtcManager.toggleVideo();
+      setIsVideoEnabled(enabled);
     }
   };
 
@@ -231,6 +157,7 @@ function RoomPage() {
       })
       .catch(err => {
         console.error('Ошибка копирования: ', err);
+        // Fallback для старых браузеров
         const textArea = document.createElement('textarea');
         textArea.value = fullInviteLink;
         document.body.appendChild(textArea);
@@ -243,6 +170,7 @@ function RoomPage() {
   };
 
   const leaveRoom = () => {
+    console.log('🚪 Leaving room');
     if (webrtcManager) {
       webrtcManager.destroy();
     }
@@ -257,176 +185,181 @@ function RoomPage() {
     setShowInviteModal(false);
   };
 
-  // Функция для отправки сообщений
-  const sendMessage = () => {
-    if (newMessage.trim() === '') return;
+  const restartWebRTC = async () => {
+    console.log('🔄 Restarting WebRTC connection');
+    setError('');
+    setConnectionStatus('connecting');
     
-    const message = {
-      id: Date.now(),
-      sender: currentUser.name,
-      text: newMessage,
-      timestamp: new Date().toLocaleTimeString()
-    };
+    if (webrtcManager) {
+      webrtcManager.destroy();
+    }
     
-    setMessages(prev => [...prev, message]);
-    setNewMessage('');
-    
-    // Прокрутка к последнему сообщению
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    await initializeWebRTC();
   };
 
   if (!roomId) {
     return <div>Ошибка: Комната не найдена</div>;
   }
 
-  // Подготовка данных для отображения
-  const localParticipant = participants.find(p => p.id === currentUser.id);
-  const remoteParticipants = participants
-    .filter(p => p.id !== currentUser.id)
-    .map(p => ({
-      ...p,
-      stream: remoteStreams[p.id]
-    }));
-
-  const isAudioMuted = !isAudioEnabled;
-  const isVideoOff = !isVideoEnabled;
-
   return (
     <div className="room-page">
-      {/* Header */}
       <header className="room-header">
-        <div className="room-info">
-          <h2>{roomName || `Комната ${roomId}`}</h2>
-          <p>Участников: {participants.length} | {isHost ? 'Вы организатор' : 'Участник'}</p>
-        </div>
-        <div className="room-actions">
-          <button onClick={copyInviteLink} className="invite-btn">
-            <span className="material-icons">link</span>
-            Пригласить
-          </button>
-          <button onClick={leaveRoom} className="leave-btn">
-            <span className="material-icons">logout</span>
-            Выйти
-          </button>
+        <div className="room-header-content">
+          <div className="room-info">
+            <h2>Комната: {roomName}</h2>
+            <div className="room-details">
+              <span className="room-id">ID: {roomId}</span>
+              <span className="invite-code">Код: {inviteLink}</span>
+              {isHost && <span className="host-badge">👑 Организатор</span>}
+              <div className="connection-status">
+                Статус: {connectionStatus === 'connected' ? '🟢 Подключено' : 
+                        connectionStatus === 'connecting' ? '🟡 Подключение...' : 
+                        '🔴 Ошибка'}
+              </div>
+            </div>
+          </div>
+          
+          <div className="header-controls">
+            <button onClick={openInviteModal} className="invite-btn">
+              📨 Пригласить
+            </button>
+            <button onClick={leaveRoom} className="leave-btn">
+              📞 Выйти
+            </button>
+          </div>
         </div>
       </header>
 
+      {error && (
+        <div className="error-message">
+          {error}
+          <button onClick={restartWebRTC}>Попробовать снова</button>
+        </div>
+      )}
+
       <div className="room-content">
-        {/* Видео контейнер */}
-        <section className="video-section">
-          <div className="video-grid">
-            {/* Локальное видео */}
-            {localParticipant && (
-              <div className="video-container local">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="video-element"
-                />
-                <div className="video-overlay">
-                  <span className="user-name">Вы ({currentUser.name})</span>
-                  {isVideoOff && <span className="status">Камера выключена</span>}
-                  {isAudioMuted && <span className="status">Микрофон выключен</span>}
-                </div>
+        <div className="video-container">
+          {/* Локальное видео */}
+          <div className="video-wrapper local-video">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+            />
+            <div className="video-label">
+              Вы {isHost && '👑'} - {currentUser?.name}
+              <div className="status-indicators">
+                {!isAudioEnabled && <span className="muted-indicator">🔇</span>}
+                {!isVideoEnabled && <span className="muted-indicator">❌</span>}
               </div>
-            )}
-
-            {/* Удаленные видео */}
-            {remoteParticipants.map(participant => (
-              <div key={participant.id} className="video-container remote">
-                <video
-                  ref={el => remoteVideosRef.current[participant.id] = el}
-                  autoPlay
-                  playsInline
-                  className="video-element"
-                  onLoadedMetadata={() => {
-                    if (remoteVideosRef.current[participant.id] && participant.stream) {
-                      remoteVideosRef.current[participant.id].srcObject = participant.stream;
-                    }
-                  }}
-                />
-                <div className="video-overlay">
-                  <span className="user-name">{participant.name}</span>
-                </div>
-              </div>
-            ))}
+            </div>
           </div>
 
-          {/* Управление медиа */}
-          <div className="media-controls">
-            <button 
-              onClick={toggleAudio} 
-              className={`control-btn ${isAudioMuted ? 'muted' : ''}`}
-            >
-              <span className="material-icons">
-                {isAudioMuted ? 'mic_off' : 'mic'}
-              </span>
-            </button>
-            <button 
-              onClick={toggleVideo} 
-              className={`control-btn ${isVideoOff ? 'off' : ''}`}
-            >
-              <span className="material-icons">
-                {isVideoOff ? 'videocam_off' : 'videocam'}
-              </span>
-            </button>
-          </div>
-        </section>
+          {/* Удаленные видео */}
+          {Object.entries(remoteStreams).map(([userId, stream]) => (
+            <div key={userId} className="video-wrapper remote-video">
+              <video
+                ref={el => remoteVideosRef.current[userId] = el}
+                autoPlay
+                playsInline
+              />
+              <div className="video-label">
+                Участник {userId}
+              </div>
+            </div>
+          ))}
+        </div>
 
-        {/* Чат и участники */}
-        <section className="sidebar">
-          {/* Список участников */}
+        {/* Боковая панель с участниками */}
+        <div className="sidebar">
           <div className="participants-section">
             <h3>Участники ({participants.length})</h3>
             <div className="participants-list">
               {participants.map(participant => (
                 <div key={participant.id} className="participant-item">
                   <span className="participant-name">
-                    {participant.name} {participant.id === currentUser.id && '(Вы)'}
+                    {participant.name}
+                    {participant.isHost && ' 👑'}
                   </span>
-                  <div className="participant-status">
-                    {participant.id !== currentUser.id && <span className="material-icons online-dot">circle</span>}
-                  </div>
+                  <span className="participant-status">
+                    {remoteStreams[participant.id] ? '🟢' : '⚫'}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Чат */}
-          <div className="chat-section">
-            <div className="chat-header">
-              <h3>Чат</h3>
-            </div>
-            
-            <div className="messages-container">
-              {messages.map(message => (
-                <div key={message.id} className="message">
-                  <strong>{message.sender}:</strong> {message.text}
-                  <span className="timestamp">{message.timestamp}</span>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="message-input">
-              <input
-                type="text"
-                placeholder="Введите сообщение..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-              />
-              <button onClick={sendMessage}>
-                <span className="material-icons">send</span>
+          <div className="controls-section">
+            <h3>Управление</h3>
+            <div className="control-buttons">
+              <button 
+                onClick={toggleAudio}
+                className={`control-btn ${isAudioEnabled ? 'active' : 'muted'}`}
+              >
+                {isAudioEnabled ? '🔊 Микрофон' : '🔇 Выкл'}
+              </button>
+              <button 
+                onClick={toggleVideo}
+                className={`control-btn ${isVideoEnabled ? 'active' : 'muted'}`}
+              >
+                {isVideoEnabled ? '📹 Камера' : '❌ Выкл'}
+              </button>
+              <button onClick={openInviteModal} className="control-btn invite">
+                📨 Пригласить
+              </button>
+              <button onClick={leaveRoom} className="control-btn leave">
+                📞 Выйти
               </button>
             </div>
           </div>
-        </section>
+        </div>
       </div>
+
+      {/* Нижние контролы для мобильных устройств */}
+      <div className="mobile-controls">
+        <button 
+          onClick={toggleAudio}
+          className={`control-btn ${isAudioEnabled ? 'active' : 'muted'}`}
+        >
+          {isAudioEnabled ? '🔊' : '🔇'}
+        </button>
+        <button 
+          onClick={toggleVideo}
+          className={`control-btn ${isVideoEnabled ? 'active' : 'muted'}`}
+        >
+          {isVideoEnabled ? '📹' : '❌'}
+        </button>
+        <button onClick={openInviteModal} className="control-btn invite">
+          📨
+        </button>
+        <button onClick={leaveRoom} className="control-btn leave">
+          📞
+        </button>
+      </div>
+
+      {/* Модальное окно приглашения */}
+      {showInviteModal && (
+        <div className="modal-overlay" onClick={closeInviteModal}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Пригласить в комнату</h3>
+            <p>Отправьте эту ссылку участникам:</p>
+            <div className="invite-link-container">
+              <code className="invite-link">
+                {window.location.origin}/?join={inviteLink}
+              </code>
+            </div>
+            <div className="modal-buttons">
+              <button onClick={copyInviteLink} className="copy-btn">
+                📋 Скопировать ссылку
+              </button>
+              <button onClick={closeInviteModal} className="close-btn">
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

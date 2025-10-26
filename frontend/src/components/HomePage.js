@@ -29,13 +29,7 @@ function HomePage() {
   const joinRoomAuto = async (code) => {
     setLoading(true);
     try {
-      let cleanCode = code;
-      if (code.includes('join=')) {
-        cleanCode = code.split('join=')[1];
-      }
-      cleanCode = cleanCode.split('&')[0];
-      cleanCode = cleanCode.trim();
-      
+      const cleanCode = code.split('=').pop();
       console.log('Auto-joining room with code:', cleanCode);
       const response = await axios.get(`${API_BASE}/rooms/${cleanCode}`);
       
@@ -152,6 +146,11 @@ function HomePage() {
           <h2>Добро пожаловать в видеоконференции</h2>
           <p>Создайте новую комнату или присоединитесь к существующей</p>
         </section>
+        
+        {/* Добавлен разделитель из версии 2 */}
+        <div className="divider">
+          <span>или</span>
+        </div>
         
         <section className='boxes'>
           <section className="action-section">
