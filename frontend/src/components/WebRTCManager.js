@@ -21,6 +21,8 @@ class WebRTCManager {
       ],
       iceCandidatePoolSize: 10
     };
+
+    this.chatMessageHandler = null;
   }
 
   async initialize() {
@@ -110,6 +112,17 @@ class WebRTCManager {
     if (data.from_user_id === this.userId) return;
 
     console.log(`📨 ${data.type} from ${data.from_user_id}`);
+
+    if (data.type === 'chat_message' && this.chatMessageHandler) {
+      this.chatMessageHandler({
+        id: Date.now(),
+        message: data.message,
+        userName: data.from_user_id === this.userId ? 'Вы' : `Участник ${data.from_user_id}`,
+        isOwn: data.from_user_id === this.userId,
+        timestamp: data.timestamp || new Date().toISOString()
+      });
+      return; // Важно: возвращаемся, чтобы не обрабатывать как WebRTC сообщение
+    }
 
     switch (data.type) {
       case 'user_joined':
@@ -340,6 +353,22 @@ class WebRTCManager {
     } catch (error) {
       console.error('❌ Error restarting media:', error);
       throw error;
+    }
+  }
+
+  setChatMessageHandler(handler) {
+    this.chatMessageHandler = handler;
+  }
+
+  sendChatMessage(message) {
+    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+      this.sendWebSocketMessage({
+        type: 'chat_message',
+        message: message,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      console.error('WebSocket not connected');
     }
   }
 

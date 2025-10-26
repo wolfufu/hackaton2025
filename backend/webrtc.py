@@ -1,4 +1,4 @@
-# webrtc.py
+# webrtc.py - ТОЛЬКО ДОБАВЛЯЕМ ЛОГИРОВАНИЕ, НИЧЕГО НЕ УДАЛЯЕМ
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from websocket import manager
 import logging
@@ -24,7 +24,13 @@ async def webrtc_websocket(websocket: WebSocket, room_id: str, user_id: str):
         while True:
             try:
                 data = await websocket.receive_json()
-                logger.debug(f"Received WebRTC message from {user_id}: {data.get('type')}")
+                message_type = data.get('type')
+                
+                # ✅ ДОБАВЛЯЕМ ЛОГИРОВАНИЕ ДЛЯ ЧАТА (НИЧЕГО НЕ МЕНЯЕМ В ЛОГИКЕ)
+                if message_type == 'chat_message':
+                    logger.info(f"💬 CHAT from {user_id}: {data.get('message')}")
+                
+                logger.debug(f"Received WebRTC message from {user_id}: {message_type}")
                 
                 # Пересылаем сообщение всем участникам комнаты кроме отправителя
                 await manager.broadcast({
