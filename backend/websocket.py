@@ -1,7 +1,8 @@
+# websocket.py
 from fastapi import WebSocket
-from typing import Dict, List, Optional
+from typing import Dict, List
 import logging
-import asyncio
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -13,23 +14,19 @@ class ConnectionManager:
         self.websocket_to_room: Dict[WebSocket, str] = {}
 
     async def connect(self, websocket: WebSocket, room_id: str, user_id: str):
-        """Подключаем пользователя к комнате"""
         await websocket.accept()
         
         # Очищаем старые соединения этого пользователя
         await self._cleanup_user_connections(user_id, room_id)
         
-        # Инициализируем комнату если нужно
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
             self.room_users[room_id] = []
         
-        # Добавляем соединение
         self.active_connections[room_id].append(websocket)
         self.websocket_to_user[websocket] = user_id
         self.websocket_to_room[websocket] = room_id
         
-        # Добавляем пользователя в комнату
         if user_id not in self.room_users[room_id]:
             self.room_users[room_id].append(user_id)
         
@@ -100,7 +97,7 @@ class ConnectionManager:
             
         logger.info(f"📢 Broadcasting {message.get('type')} to {len(connections)} users in {room_id}")
         
-        for websocket in connections[:]:  # Копируем список для безопасной итерации
+        for websocket in connections[:]:
             if websocket == exclude_websocket:
                 continue
                 

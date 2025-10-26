@@ -1,4 +1,4 @@
-# webrtc.py - ТОЛЬКО ДОБАВЛЯЕМ ЛОГИРОВАНИЕ, НИЧЕГО НЕ УДАЛЯЕМ
+# webrtc.py - ПОЛНОСТЬЮ ИСПРАВЛЕННЫЙ ФАЙЛ
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from websocket import manager
 import logging
@@ -10,60 +10,40 @@ router = APIRouter()
 async def webrtc_websocket(websocket: WebSocket, room_id: str, user_id: str):
     room_key = f"webrtc_{room_id}"
     
+    logger.info(f"🎯 NEW WEBSOCKET: User {user_id} connecting to room {room_id}")
+    
     try:
-        await manager.connect(websocket, room_key)
-        logger.info(f"User {user_id} connected to room {room_id}")
-        
-        # Уведомляем других участников о новом пользователе
-        await manager.broadcast({
-            "type": "user_joined",
-            "user_id": user_id
-        }, room_key)
+        # Подключаем пользователя
+        await manager.connect(websocket, room_key, user_id)
+        logger.info(f"✅ CONNECTED: User {user_id} in room {room_id}")
         
         # Основной цикл обработки сообщений
         while True:
             try:
+                # Ждем сообщение от клиента
                 data = await websocket.receive_json()
-                message_type = data.get('type')
+                message_type = data.get('type', 'unknown')
                 
-                # ✅ ДОБАВЛЯЕМ ЛОГИРОВАНИЕ ДЛЯ ЧАТА (НИЧЕГО НЕ МЕНЯЕМ В ЛОГИКЕ)
-                if message_type == 'chat_message':
-                    logger.info(f"💬 CHAT from {user_id}: {data.get('message')}")
+                logger.info(f"📨 MESSAGE: {type} from {user_id}")
                 
-                logger.debug(f"Received WebRTC message from {user_id}: {message_type}")
-                
-                # Пересылаем сообщение всем участникам комнаты кроме отправителя
+                # ✅ ПРОСТО ПЕРЕСЫЛАЕМ ВСЕ СООБЩЕНИЯ ВСЕМ УЧАСТНИКАМ
                 await manager.broadcast({
                     **data,
-                    "from_user_id": user_id
-                }, room_key)
+                    "from_user_id": user_id  # Добавляем ID отправителя
+                }, room_key, exclude_websocket=websocket)
                 
             except WebSocketDisconnect:
-                logger.info(f"User {user_id} disconnected normally")
+                logger.info(f"🔌 NORMAL DISCONNECT: User {user_id} from room {room_id}")
                 break
             except Exception as e:
-                logger.error(f"Error processing message from {user_id}: {e}")
-                # Продолжаем работу при ошибках обработки сообщений
+                logger.error(f"❌ MESSAGE ERROR: User {user_id}: {e}")
                 continue
                 
     except WebSocketDisconnect:
-        logger.info(f"User {user_id} disconnected during connection")
+        logger.info(f"🔌 DISCONNECT DURING CONNECT: User {user_id}")
     except Exception as e:
-        logger.error(f"WebSocket error for user {user_id}: {e}")
+        logger.error(f"❌ WEBSOCKET ERROR: User {user_id}: {e}")
     finally:
-        # Всегда уведомляем о выходе пользователя
-        try:
-            await manager.broadcast({
-                "type": "user_left", 
-                "user_id": user_id
-            }, room_key)
-        except Exception as e:
-            logger.error(f"Error broadcasting user_left: {e}")
-        
-        # Отключаем WebSocket
-        try:
-            await manager.disconnect(websocket, room_key)
-        except Exception as e:
-            logger.error(f"Error during disconnect: {e}")
-        
-        logger.info(f"User {user_id} fully disconnected from room {room_id}")
+        # Всегда очищаем соединение
+        logger.info(f"🧹 CLEANUP: User {user_id} from room {room_id}")
+        await manager.disconnect(websocket, room_key, user_id)

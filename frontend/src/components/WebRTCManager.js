@@ -27,16 +27,32 @@ class WebRTCManager {
 
   async initialize() {
     try {
-      console.log('🎥 Initializing WebRTC for user:', this.userId);
+      console.log('Step 1: Getting user media');
       
-      await this.initializeMediaDevices();
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      console.log('Media obtained:', {
+        video: this.localStream.getVideoTracks().length > 0,
+        audio: this.localStream.getAudioTracks().length > 0
+      });
+
       await this.connectWebSocket();
       
-      console.log('✅ WebRTC initialized successfully');
       return this.localStream;
       
     } catch (error) {
-      console.error('❌ WebRTC initialization failed:', error);
+      console.error('Failed to initialize WebRTC:', error);
       throw error;
     }
   }
@@ -56,27 +72,27 @@ class WebRTCManager {
         }
       });
       
-      console.log('✅ Media devices accessed:', {
+      console.log('Media devices accessed:', {
         video: this.localStream.getVideoTracks().length > 0,
         audio: this.localStream.getAudioTracks().length > 0
       });
 
     } catch (error) {
-      console.warn('⚠️ Cannot access camera/microphone:', error);
+      console.warn('Cannot access camera/microphone:', error);
       this.localStream = new MediaStream();
-      console.log('📱 Created empty stream for connection testing');
+      console.log('Created empty stream for connection testing');
     }
   }
 
   connectWebSocket() {
     return new Promise((resolve, reject) => {
       const wsUrl = `${WS_BASE}/ws/webrtc/${this.roomId}/${this.userId}`;
-      console.log('🔌 Connecting to WebSocket:', wsUrl);
+      console.log('Connecting to WebSocket:', wsUrl);
       
       this.websocket = new WebSocket(wsUrl);
       
       this.websocket.onopen = () => {
-        console.log('✅ WebSocket connected');
+        console.log('WebSocket connected');
         
         setTimeout(() => {
           this.sendWebSocketMessage({
@@ -89,12 +105,12 @@ class WebRTCManager {
       };
 
       this.websocket.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        console.error('WebSocket error:', error);
         reject(error);
       };
 
       this.websocket.onclose = (event) => {
-        console.log('🔌 WebSocket disconnected:', event.code, event.reason);
+        console.log('WebSocket disconnected:', event.code, event.reason);
       };
 
       this.websocket.onmessage = async (event) => {
@@ -102,10 +118,69 @@ class WebRTCManager {
           const data = JSON.parse(event.data);
           await this.handleSignalingMessage(data);
         } catch (error) {
-          console.error('❌ Error processing message:', error);
+          console.error('Error processing message:', error);
         }
       };
     });
+  }
+
+  async handleWebSocketMessage(data) {
+    const { type, from_user_id } = data;
+    
+    if (from_user_id === this.userId) {
+      return;
+    }
+
+    console.log(`Received ${type} from ${from_user_id}`);
+
+    switch (type) {
+      case 'existing_users':
+        console.log(`Existing users in room: ${data.users}`);
+        await this.handleExistingUsers(data.users);
+        break;
+        
+      case 'user_joined':
+        console.log(`New user joined: ${data.user_id}`);
+        await this.handleUserJoined(data.user_id);
+        break;
+        
+      case 'user_left':
+        console.log(`User left: ${data.user_id}`);
+        this.handleUserLeft(data.user_id);
+        break;
+        
+      case 'offer':
+        console.log(`Received offer from ${from_user_id}`);
+        await this.handleOffer(data.offer, from_user_id);
+        break;
+        
+      case 'answer':
+        console.log(`Received answer from ${from_user_id}`);
+        await this.handleAnswer(data.answer, from_user_id);
+        break;
+        
+      case 'ice-candidate':
+        console.log(`Received ICE candidate from ${from_user_id}`);
+        await this.handleIceCandidate(data.candidate, from_user_id);
+        break;
+        
+      case 'chat_message':
+        console.log(`Received chat message from ${from_user_id}: ${data.message}`);
+        if (this.onChatMessage) {
+          this.onChatMessage(data);
+        }
+        break;
+        
+      case 'chat_history':
+        console.log(`Received chat history: ${data.messages?.length || 0} messages`);
+        if (this.onChatHistory) {
+          this.onChatHistory(data.messages || []);
+        }
+        break;
+        
+      default:
+        console.log('Unknown message type:', type);
+    }
   }
 
   async handleSignalingMessage(data) {
@@ -121,7 +196,7 @@ class WebRTCManager {
         isOwn: data.from_user_id === this.userId,
         timestamp: data.timestamp || new Date().toISOString()
       });
-      return; // Важно: возвращаемся, чтобы не обрабатывать как WebRTC сообщение
+      return; 
     }
 
     switch (data.type) {
@@ -143,35 +218,41 @@ class WebRTCManager {
     }
   }
 
+  async handleExistingUsers(userIds) {
+    for (const userId of userIds) {
+      if (userId !== this.userId && !this.connectedUsers.has(userId)) {
+        this.connectedUsers.add(userId);
+        console.log(`Creating connection to existing user ${userId}`);
+        await this.createOffer(userId);
+      }
+    }
+  }
+
   async handleUserJoined(userId) {
-    if (userId === this.userId) return;
-    
-    console.log(`👤 New user joined: ${userId}`);
-    this.connectedUsers.add(userId);
-    
-    setTimeout(async () => {
-      await this.createOffer(userId);
-    }, 2000);
+    if (userId !== this.userId && !this.connectedUsers.has(userId)) {
+      this.connectedUsers.add(userId);
+      console.log(`Creating connection to new user ${userId}`);
+      setTimeout(() => {
+        this.createOffer(userId);
+      }, 1000);
+    }
   }
 
   createPeerConnection(userId) {
-    console.log(`🔗 Creating peer connection for ${userId}`);
+    console.log(`Creating peer connection for ${userId}`);
     
     const peerConnection = new RTCPeerConnection(this.configuration);
     
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
-        console.log(`➕ Adding ${track.kind} track to ${userId}`);
-        try {
-          peerConnection.addTrack(track, this.localStream);
-        } catch (error) {
-          console.error(`❌ Error adding ${track.kind} track:`, error);
-        }
+        console.log(`Adding ${track.kind} track to ${userId}`);
+        peerConnection.addTrack(track, this.localStream);
       });
     }
 
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`Sending ICE candidate to ${userId}`);
         this.sendWebSocketMessage({
           type: 'ice-candidate',
           candidate: event.candidate,
@@ -181,39 +262,44 @@ class WebRTCManager {
     };
 
     peerConnection.ontrack = (event) => {
-      console.log(`🎬 Received remote ${event.track.kind} track from ${userId}`);
-      
-      if (event.streams && event.streams[0]) {
-        console.log(`📹 Stream received from ${userId} with ${event.streams[0].getTracks().length} tracks`);
-        this.onRemoteStream(userId, event.streams[0]);
+      console.log(`🎬 Received remote stream from ${userId}`);
+      const remoteStream = event.streams[0];
+      if (remoteStream && remoteStream.getTracks().length > 0) {
+        console.log(`Successfully connected to ${userId}`);
+        this.onRemoteStream(userId, remoteStream);
       }
     };
 
     peerConnection.onconnectionstatechange = () => {
-      const state = peerConnection.connectionState;
-      console.log(`🔗 ${userId} connection state:`, state);
+      console.log(`🔗 Connection state with ${userId}: ${peerConnection.connectionState}`);
     };
 
     this.peerConnections[userId] = peerConnection;
     return peerConnection;
   }
 
+  async handleExistingUsers(userIds) {
+    for (const userId of userIds) {
+      if (userId !== this.userId && !this.connectedUsers.has(userId)) {
+        this.connectedUsers.add(userId);
+        console.log(`Creating connection to existing user ${userId}`);
+        await this.createOffer(userId);
+      }
+    }
+  }
+
   async createOffer(userId) {
     if (userId === this.userId) return;
-    
-    console.log(`📝 Creating offer for ${userId}`);
+
+    console.log(`Creating offer for ${userId}`);
     
     let peerConnection = this.peerConnections[userId];
     if (!peerConnection) {
       peerConnection = this.createPeerConnection(userId);
     }
-    
+
     try {
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-      });
-      
+      const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
       
       this.sendWebSocketMessage({
@@ -222,24 +308,22 @@ class WebRTCManager {
         to_user_id: userId
       });
       
-      console.log(`✅ Offer sent to ${userId}`);
+      console.log(`Offer sent to ${userId}`);
     } catch (error) {
-      console.error(`❌ Error creating offer for ${userId}:`, error);
+      console.error(`Error creating offer for ${userId}:`, error);
     }
   }
 
   async handleOffer(offer, fromUserId) {
-    if (fromUserId === this.userId) return;
-    
-    console.log(`📝 Handling offer from ${fromUserId}`);
-    
+    console.log(`Handling offer from ${fromUserId}`);
+
     let peerConnection = this.peerConnections[fromUserId];
     if (!peerConnection) {
       peerConnection = this.createPeerConnection(fromUserId);
     }
-    
+
     try {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      await peerConnection.setRemoteDescription(offer);
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
       
@@ -249,9 +333,9 @@ class WebRTCManager {
         to_user_id: fromUserId
       });
       
-      console.log(`✅ Answer sent to ${fromUserId}`);
+      console.log(`Answer sent to ${fromUserId}`);
     } catch (error) {
-      console.error(`❌ Error handling offer from ${fromUserId}:`, error);
+      console.error('Error handling offer:', error);
     }
   }
 
@@ -260,26 +344,27 @@ class WebRTCManager {
     if (peerConnection) {
       try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log(`✅ Answer processed from ${fromUserId}`);
+        console.log(`Answer processed from ${fromUserId}`);
       } catch (error) {
-        console.error(`❌ Error handling answer from ${fromUserId}:`, error);
+        console.error(`Error handling answer from ${fromUserId}:`, error);
       }
     }
   }
 
   async handleIceCandidate(candidate, fromUserId) {
     const peerConnection = this.peerConnections[fromUserId];
-    if (peerConnection && peerConnection.remoteDescription) {
+    if (peerConnection) {
       try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        await peerConnection.addIceCandidate(candidate);
+        console.log(`ICE candidate added from ${fromUserId}`);
       } catch (error) {
-        console.error(`❌ Error adding ICE candidate from ${fromUserId}:`, error);
+        console.error('Error adding ICE candidate:', error);
       }
     }
   }
 
   handleUserLeft(userId) {
-    console.log(`👤 User left: ${userId}`);
+    console.log(`Cleaning up connection to ${userId}`);
     if (this.peerConnections[userId]) {
       this.peerConnections[userId].close();
       delete this.peerConnections[userId];
@@ -290,22 +375,19 @@ class WebRTCManager {
 
   sendWebSocketMessage(message) {
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-      const messageWithSender = {
-        ...message,
-        from_user_id: this.userId
-      };
-      this.websocket.send(JSON.stringify(messageWithSender));
+      this.websocket.send(JSON.stringify(message));
+      console.log('WebSocket message sent:', message.type);
+    } else {
+      console.warn('WebSocket not connected, message not sent:', message.type);
     }
   }
 
   toggleAudio() {
     if (this.localStream) {
-      const audioTracks = this.localStream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        const enabled = !audioTracks[0].enabled;
-        audioTracks[0].enabled = enabled;
-        console.log(`🎤 Audio ${enabled ? 'enabled' : 'disabled'}`);
-        return enabled;
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        return audioTrack.enabled;
       }
     }
     return false;
@@ -313,12 +395,10 @@ class WebRTCManager {
 
   toggleVideo() {
     if (this.localStream) {
-      const videoTracks = this.localStream.getVideoTracks();
-      if (videoTracks.length > 0) {
-        const enabled = !videoTracks[0].enabled;
-        videoTracks[0].enabled = enabled;
-        console.log(`📹 Video ${enabled ? 'enabled' : 'disabled'}`);
-        return enabled;
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        return videoTrack.enabled;
       }
     }
     return false;
@@ -351,38 +431,18 @@ class WebRTCManager {
       
       return this.localStream;
     } catch (error) {
-      console.error('❌ Error restarting media:', error);
+      console.error('Error restarting media:', error);
       throw error;
     }
   }
 
-  setChatMessageHandler(handler) {
-    this.chatMessageHandler = handler;
-  }
-
-  sendChatMessage(message) {
-    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-      this.sendWebSocketMessage({
-        type: 'chat_message',
-        message: message,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      console.error('WebSocket not connected');
-    }
-  }
-
   destroy() {
-    console.log('🧹 Cleaning up WebRTC...');
+    console.log('Destroying WebRTCManager');
     
-    this.sendWebSocketMessage({
-      type: 'user_left',
-      user_id: this.userId
-    });
-
     Object.values(this.peerConnections).forEach(pc => pc.close());
     this.peerConnections = {};
-
+    this.connectedUsers.clear();
+    
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
     }

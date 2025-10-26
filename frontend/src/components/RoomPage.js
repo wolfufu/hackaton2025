@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import WebRTCManager from './WebRTCManager';
 import './RoomPage.css';
+import { useChat } from '../hooks/useChat';
 
-// Совместимый RoomPage.js для работы с обоими фронтендами
 function RoomPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -24,11 +24,33 @@ function RoomPage() {
   const localVideoRef = useRef();
   const remoteVideosRef = useRef({});
 
+  const {
+    messages,
+    newMessage,
+    setNewMessage,
+    sendMessage,
+    clearChat,
+    messagesEndRef
+  } = useChat(webrtcManager, currentUser, roomId);
+
+  const handleSendMessage = () => {
+    if (newMessage.trim()) {
+      sendMessage();
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   useEffect(() => {
-    console.log('🚀 RoomPage mounted with:', { roomId, currentUserId: currentUser?.id, isHost });
+    console.log('RoomPage mounted with:', { roomId, currentUserId: currentUser?.id, isHost });
     
     if (!roomId || !currentUser) {
-      console.warn('❌ Missing roomId or currentUser, redirecting to home');
+      console.warn('Missing roomId or currentUser, redirecting to home');
       navigate('/');
       return;
     }
@@ -36,7 +58,7 @@ function RoomPage() {
     initializeWebRTC();
 
     return () => {
-      console.log('🧹 RoomPage unmounting, cleaning up WebRTC');
+      console.log('RoomPage unmounting, cleaning up WebRTC');
       if (webrtcManager) {
         webrtcManager.destroy();
       }
@@ -44,15 +66,15 @@ function RoomPage() {
   }, [roomId, currentUser]);
 
   useEffect(() => {
-    console.log('📊 Remote streams updated:', Object.keys(remoteStreams).length);
+    console.log('Remote streams updated:', Object.keys(remoteStreams).length);
     Object.entries(remoteStreams).forEach(([userId, stream]) => {
-      console.log(`📹 User ${userId} has stream:`, stream.getTracks().length > 0);
+      console.log(`User ${userId} has stream:`, stream.getTracks().length > 0);
     });
   }, [remoteStreams]);
 
   const initializeWebRTC = async () => {
     try {
-      console.log('🎯 Initializing WebRTC for room:', roomId);
+      console.log('Initializing WebRTC for room:', roomId);
       setConnectionStatus('connecting');
       
       const manager = new WebRTCManager(
@@ -63,7 +85,7 @@ function RoomPage() {
       );
 
       const stream = await manager.initialize();
-      console.log('✅ WebRTC initialized successfully');
+      console.log('WebRTC initialized successfully');
       
       setWebrtcManager(manager);
       setLocalStream(stream);
@@ -71,10 +93,9 @@ function RoomPage() {
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
-        console.log('🎥 Local video element updated');
+        console.log('Local video element updated');
       }
 
-      // Добавляем текущего пользователя в список участников
       setParticipants([{
         id: currentUser.id,
         name: currentUser.name,
@@ -82,18 +103,17 @@ function RoomPage() {
       }]);
 
     } catch (error) {
-      console.error('❌ Failed to initialize WebRTC:', error);
+      console.error('Failed to initialize WebRTC:', error);
       setError('Не удалось получить доступ к камере/микрофону. Проверьте разрешения.');
       setConnectionStatus('error');
     }
   };
 
   const handleRemoteStream = (userId, stream) => {
-    console.log('🎬 Remote stream received from:', userId, 'Tracks:', stream.getTracks().length);
-    
-    // Проверяем что поток содержит треки
+    console.log('Remote stream received from:', userId, 'Tracks:', stream.getTracks().length);
+
     if (stream.getTracks().length === 0) {
-      console.warn('⚠️ Empty stream received from:', userId);
+      console.warn('Empty stream received from:', userId);
       return;
     }
 
@@ -102,7 +122,6 @@ function RoomPage() {
       [userId]: stream
     }));
 
-    // Добавляем пользователя в список участников
     setParticipants(prev => {
       if (!prev.find(p => p.id.toString() === userId.toString())) {
         return [...prev, {
@@ -114,24 +133,22 @@ function RoomPage() {
       return prev;
     });
 
-    // Устанавливаем поток для видео элемента
     setTimeout(() => {
       if (remoteVideosRef.current[userId]) {
         remoteVideosRef.current[userId].srcObject = stream;
-        console.log('✅ Video element updated for user:', userId);
+        console.log('Video element updated for user:', userId);
       }
     }, 100);
   };
 
   const handleUserLeft = (userId) => {
-    console.log('👋 User left:', userId);
+    console.log('User left:', userId);
     setRemoteStreams(prev => {
       const newStreams = { ...prev };
       delete newStreams[userId];
       return newStreams;
     });
 
-    // Удаляем пользователя из списка участников
     setParticipants(prev => prev.filter(p => p.id.toString() !== userId.toString()));
   };
 
@@ -157,7 +174,6 @@ function RoomPage() {
       })
       .catch(err => {
         console.error('Ошибка копирования: ', err);
-        // Fallback для старых браузеров
         const textArea = document.createElement('textarea');
         textArea.value = fullInviteLink;
         document.body.appendChild(textArea);
@@ -170,7 +186,7 @@ function RoomPage() {
   };
 
   const leaveRoom = () => {
-    console.log('🚪 Leaving room');
+    console.log('Leaving room');
     if (webrtcManager) {
       webrtcManager.destroy();
     }
@@ -186,7 +202,7 @@ function RoomPage() {
   };
 
   const restartWebRTC = async () => {
-    console.log('🔄 Restarting WebRTC connection');
+    console.log('Restarting WebRTC connection');
     setError('');
     setConnectionStatus('connecting');
     
@@ -288,6 +304,56 @@ function RoomPage() {
                 </div>
               ))}
             </div>
+  <div className="chat-section">
+          <h3>💬 Чат комнаты</h3>
+          
+          <div className="chat-messages">
+            {messages.length === 0 ? (
+              <div className="no-messages">
+                💬 Начните общение в чате...
+              </div>
+            ) : (
+              messages.map(message => (
+                <div key={message.id} className={`message ${message.isOwn ? 'own-message' : 'other-message'}`}>
+                  <div className="message-sender">
+                    {message.isOwn ? 'Вы' : message.userName}
+                  </div>
+                  <div className="message-text">{message.message}</div>
+                  <div className="message-time">
+                    {new Date(message.timestamp).toLocaleTimeString('ru-RU', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+          
+          <div className="chat-input">
+            <input
+              type="text"
+              placeholder="Введите сообщение..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+            />
+            <button 
+              onClick={handleSendMessage} 
+              disabled={!newMessage.trim()}
+              className="send-btn"
+            >
+              📤
+            </button>
+          </div>
+
+          {messages.length > 0 && (
+            <button onClick={clearChat} className="clear-chat-btn">
+              Очистить чат
+            </button>
+          )}
+        </div>
           </div>
 
           <div className="controls-section">
